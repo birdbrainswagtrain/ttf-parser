@@ -5,6 +5,18 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+### Added
+- Basic CFF2 support.
+- `Font::variation_axes_count`
+- `Font::variation_axis`
+- `Font::map_variation_coordinates`
+- `Font::metrics_variation`
+- `Font::glyph_hor_advance_variation`
+- `Font::glyph_hor_side_bearing_variation`
+- `Font::glyph_ver_advance_variation`
+- `Font::glyph_ver_side_bearing_variation`
+- `Tag` type.
+- Initial GSUB/GPOS support.
 
 ## [0.4.0] - 2020-02-24
 
