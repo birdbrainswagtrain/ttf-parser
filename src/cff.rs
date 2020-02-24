@@ -81,6 +81,7 @@ pub enum CFFError {
     BboxOverflow,
     MissingMoveTo,
     InvalidSubroutineIndex,
+    InvalidItemVariationDataIndex,
 }
 
 #[cfg(feature = "logging")]
@@ -122,6 +123,9 @@ impl core::fmt::Display for CFFError {
             }
             CFFError::InvalidSubroutineIndex => {
                 write!(f, "an invalid subroutine index")
+            }
+            CFFError::InvalidItemVariationDataIndex => {
+                write!(f, "no ItemVariationData with required index")
             }
         }
     }
@@ -1518,6 +1522,12 @@ impl<'a> ArgumentsStack<'a> {
         debug_assert!(!self.is_empty());
         self.len -= 1;
         self.data[self.len]
+    }
+
+    #[inline]
+    pub fn remove_last_n(&mut self, n: usize) {
+        assert!(n < self.len);
+        self.len -= n;
     }
 
     #[inline]

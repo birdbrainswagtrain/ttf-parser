@@ -3,9 +3,9 @@
 use core::num::NonZeroU16;
 use core::ops::Range;
 
-use crate::parser::{Stream, LazyArray16};
+use crate::parser::Stream;
 use crate::head::IndexToLocationFormat;
-use crate::{Font, GlyphId};
+use crate::{Font, GlyphId, LazyArray16};
 
 #[derive(Clone, Copy)]
 pub enum Table<'a> {
@@ -14,7 +14,7 @@ pub enum Table<'a> {
 }
 
 impl<'a> Table<'a> {
-    pub(crate) fn parse(
+    pub fn parse(
         data: &'a [u8],
         number_of_glyphs: NonZeroU16,
         format: IndexToLocationFormat,

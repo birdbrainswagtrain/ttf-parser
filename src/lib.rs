@@ -55,6 +55,7 @@ A high-level, safe, zero-allocation TrueType font parser.
 ## Supported OpenType features
 
 - (`CFF `) Glyph outlining using [outline_glyph()] method.
+- (`CFF2`) Glyph outlining using [outline_glyph()] method.
 - (`OS/2`) Retrieving font's kind using [is_regular()], [is_italic()],
   [is_bold()] and [is_oblique()] methods.
 - (`OS/2`) Retrieving font's weight using [weight()] method.
@@ -66,7 +67,14 @@ A high-level, safe, zero-allocation TrueType font parser.
 - (`GDEF`) Retrieving glyph's class using [glyph_class()] method.
 - (`GDEF`) Retrieving glyph's mark attachment class using [glyph_mark_attachment_class()] method.
 - (`GDEF`) Checking that glyph is a mark using [is_mark_glyph()] method.
+- (`avar`) Variation coordinates normalization using [map_variation_coordinates()] method.
+- (`fvar`) Variation axis parsing using [variation_axis()] method.
 - (`VORG`) Retrieving glyph's vertical origin using [glyph_y_origin()] method.
+- (`MVAR`) Retrieving font's metrics variation using [metrics_variation()] method.
+- (`HVAR`) Retrieving glyph's variation offset for horizontal advance using [glyph_hor_advance_variation()] method.
+- (`HVAR`) Retrieving glyph's variation offset for horizontal side bearing using [glyph_hor_side_bearing_variation()] method.
+- (`VVAR`) Retrieving glyph's variation offset for vertical advance using [glyph_ver_advance_variation()] method.
+- (`VVAR`) Retrieving glyph's variation offset for vertical side bearing using [glyph_ver_side_bearing_variation()] method.
 
 [is_regular()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.is_regular
 [is_italic()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.is_italic
@@ -81,7 +89,14 @@ A high-level, safe, zero-allocation TrueType font parser.
 [glyph_class()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_class
 [glyph_mark_attachment_class()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_mark_attachment_class
 [is_mark_glyph()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.is_mark_glyph
+[map_variation_coordinates()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.map_variation_coordinates
+[variation_axis()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.variation_axis
 [glyph_y_origin()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_y_origin
+[metrics_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.metrics_variation
+[glyph_hor_advance_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_hor_advance_variation
+[glyph_hor_side_bearing_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_hor_side_bearing_variation
+[glyph_ver_advance_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_ver_advance_variation
+[glyph_ver_side_bearing_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_ver_side_bearing_variation
 
 ## Error handling
 
@@ -103,32 +118,36 @@ The first one is fairly simple which makes it faster to process.
 The second one is basically a tiny language with a stack-based VM, which makes it way harder to process.
 
 ```text
-test outline_cff  ... bench:   1,298,871 ns/iter (+/- 11,846)
-test outline_glyf ... bench:     837,958 ns/iter (+/- 6,261)
+test outline_cff  ... bench:   1,293,929 ns/iter (+/- 7,798)
+test outline_cff2 ... bench:   1,847,932 ns/iter (+/- 13,006)
+test outline_glyf ... bench:     764,206 ns/iter (+/- 5,716)
 ```
 
 Here is some methods benchmarks:
 
 ```text
-test outline_glyph_276_from_cff  ... bench:       1,041 ns/iter (+/- 71)
-test outline_glyph_276_from_glyf ... bench:         674 ns/iter (+/- 15)
-test from_data_otf_cff           ... bench:         403 ns/iter (+/- 3)
-test outline_glyph_8_from_cff    ... bench:         339 ns/iter (+/- 44)
-test outline_glyph_8_from_glyf   ... bench:         295 ns/iter (+/- 16)
-test glyph_name_276              ... bench:         214 ns/iter (+/- 1)
-test from_data_ttf               ... bench:         169 ns/iter (+/- 3)
-test family_name                 ... bench:         155 ns/iter (+/- 5)
+test outline_glyph_276_from_cff  ... bench:         877 ns/iter (+/- 265)
+test outline_glyph_276_from_cff2 ... bench:         779 ns/iter (+/- 122)
+test from_data_otf_cff2          ... bench:         675 ns/iter (+/- 8)
+test outline_glyph_276_from_glyf ... bench:         623 ns/iter (+/- 77)
+test from_data_otf_cff           ... bench:         562 ns/iter (+/- 7)
+test outline_glyph_8_from_cff2   ... bench:         531 ns/iter (+/- 118)
+test outline_glyph_8_from_cff    ... bench:         322 ns/iter (+/- 7)
+test from_data_ttf               ... bench:         313 ns/iter (+/- 4)
+test outline_glyph_8_from_glyf   ... bench:         285 ns/iter (+/- 10)
+test glyph_name_276              ... bench:         214 ns/iter (+/- 3)
+test family_name                 ... bench:         170 ns/iter (+/- 12)
 test glyph_index_u41             ... bench:          16 ns/iter (+/- 0)
 test glyph_name_8                ... bench:           1 ns/iter (+/- 0)
 test underline_metrics           ... bench:         0.5 ns/iter (+/- 0)
 test units_per_em                ... bench:         0.5 ns/iter (+/- 0)
 test strikeout_metrics           ... bench:         0.5 ns/iter (+/- 0)
-test x_height                    ... bench:         0.4 ns/iter (+/- 0)
 test ascender                    ... bench:         0.2 ns/iter (+/- 0)
 test hor_advance                 ... bench:         0.2 ns/iter (+/- 0)
 test hor_side_bearing            ... bench:         0.2 ns/iter (+/- 0)
 test subscript_metrics           ... bench:         0.2 ns/iter (+/- 0)
 test width                       ... bench:         0.2 ns/iter (+/- 0)
+test x_height                    ... bench:         0.2 ns/iter (+/- 0)
 ```
 
 `family_name` is expensive, because it allocates a `String` and the original data
@@ -179,17 +198,24 @@ macro_rules! warn {
     ($($arg:tt)+) => () // do nothing
 }
 
+mod avar;
+mod cff2;
 mod cff;
 mod cmap;
+mod fvar;
 mod gdef;
 mod ggg;
 mod glyf;
+mod gpos;
+mod gsub;
 mod head;
 mod hhea;
 mod hmtx;
+mod hvar;
 mod kern;
 mod loca;
 mod maxp;
+mod mvar;
 mod name;
 mod os2;
 mod parser;
@@ -198,15 +224,21 @@ mod raw;
 mod vhea;
 mod vmtx;
 mod vorg;
+mod vvar;
 
 #[cfg(feature = "std")]
 mod writer;
 
-use parser::{Stream, SafeStream, Offset, FromData};
+use parser::{Stream, SafeStream, Offset};
+pub use fvar::VariationAxis;
 pub use gdef::GlyphClass;
 pub use ggg::*;
+pub use gpos::PositioningTable;
+pub use gsub::SubstitutionTable;
+pub use head::IndexToLocationFormat;
 pub use name::*;
 pub use os2::*;
+pub use parser::{FromData, ArraySize, LazyArray, LazyArray16, LazyArray32, LazyArrayIter};
 
 
 /// A type-safe wrapper for glyph ID.
@@ -226,6 +258,130 @@ impl Default for GlyphId {
         GlyphId(0)
     }
 }
+
+
+/// A 4-byte tag.
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct Tag(pub u32);
+
+impl Tag {
+    /// Creates a `Tag` from bytes.
+    pub const fn from_bytes(bytes: &[u8; 4]) -> Self {
+        Tag(((bytes[0] as u32) << 24) | ((bytes[1] as u32) << 16) |
+            ((bytes[2] as u32) << 8) | (bytes[3] as u32))
+    }
+
+    /// Creates a `Tag` from bytes.
+    ///
+    /// In case of empty data will return `Tag` set to 0.
+    ///
+    /// When `bytes` are shorter than 4, will set missing bytes to ` `.
+    ///
+    /// Data after first 4 bytes is ignored.
+    pub fn from_bytes_lossy(bytes: &[u8]) -> Self {
+        if bytes.is_empty() {
+            return Tag::from_bytes(&[0, 0, 0, 0]);
+        }
+
+        let mut iter = bytes.iter().cloned().chain(core::iter::repeat(b' '));
+        Tag::from_bytes(&[
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+            iter.next().unwrap(),
+        ])
+    }
+
+    /// Returns tag as 4-element byte array.
+    pub const fn to_bytes(self) -> [u8; 4] {
+        [
+            (self.0 >> 24 & 0xff) as u8,
+            (self.0 >> 16 & 0xff) as u8,
+            (self.0 >> 8 & 0xff) as u8,
+            (self.0 >> 0 & 0xff) as u8,
+        ]
+    }
+
+    /// Returns tag as 4-element byte array.
+    pub const fn to_chars(self) -> [char; 4] {
+        [
+            (self.0 >> 24 & 0xff) as u8 as char,
+            (self.0 >> 16 & 0xff) as u8 as char,
+            (self.0 >> 8 & 0xff) as u8 as char,
+            (self.0 >> 0 & 0xff) as u8 as char,
+        ]
+    }
+
+    /// Returns tag for a default script.
+    pub const fn default_script() -> Self {
+        Tag::from_bytes(b"DFLT")
+    }
+
+    /// Returns tag for a default language.
+    pub const fn default_language() -> Self {
+        Tag::from_bytes(b"dflt")
+    }
+
+    /// Checks if tag is null / `[0, 0, 0, 0]`.
+    pub const fn is_null(&self) -> bool {
+        self.0 == 0
+    }
+
+    /// Returns tag value as `u32` number.
+    pub const fn as_u32(&self) -> u32 {
+        self.0
+    }
+
+    /// Converts tag to lowercase.
+    pub fn to_lowercase(&self) -> Self {
+        let b = self.to_bytes();
+        Tag::from_bytes(&[
+            b[0].to_ascii_lowercase(),
+            b[1].to_ascii_lowercase(),
+            b[2].to_ascii_lowercase(),
+            b[3].to_ascii_lowercase(),
+        ])
+    }
+
+    /// Converts tag to uppercase.
+    pub fn to_uppercase(&self) -> Self {
+        let b = self.to_bytes();
+        Tag::from_bytes(&[
+            b[0].to_ascii_uppercase(),
+            b[1].to_ascii_uppercase(),
+            b[2].to_ascii_uppercase(),
+            b[3].to_ascii_uppercase(),
+        ])
+    }
+}
+
+impl core::fmt::Debug for Tag {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "Tag({})", self)
+    }
+}
+
+impl core::fmt::Display for Tag {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let b = self.to_chars();
+        write!(
+            f,
+            "{}{}{}{}",
+            b.get(0).unwrap_or(&' '),
+            b.get(1).unwrap_or(&' '),
+            b.get(2).unwrap_or(&' '),
+            b.get(3).unwrap_or(&' ')
+        )
+    }
+}
+
+impl FromData for Tag {
+    #[inline]
+    fn parse(data: &[u8]) -> Self {
+        Tag(u32::parse(data))
+    }
+}
+
 
 
 /// A line metrics.
@@ -279,20 +435,28 @@ pub trait OutlineBuilder {
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[allow(missing_docs)]
 pub enum TableName {
+    AxisVariations,
     CharacterToGlyphIndexMapping,
     CompactFontFormat,
+    CompactFontFormat2,
+    FontVariations,
     GlyphData,
     GlyphDefinition,
+    GlyphPositioning,
+    GlyphSubstitution,
     Header,
     HorizontalHeader,
     HorizontalMetrics,
+    HorizontalMetricsVariations,
     IndexToLocation,
     Kerning,
     MaximumProfile,
+    MetricsVariations,
     Naming,
     PostScript,
     VerticalHeader,
     VerticalMetrics,
+    VerticalMetricsVariations,
     VerticalOrigin,
     WindowsMetrics,
 }
@@ -301,21 +465,29 @@ pub enum TableName {
 /// A font data handle.
 #[derive(Clone)]
 pub struct Font<'a> {
+    avar: Option<&'a [u8]>,
     cff_: Option<cff::Metadata<'a>>,
+    cff2: Option<cff2::Metadata<'a>>,
     cmap: Option<cmap::Table<'a>>,
+    fvar: Option<fvar::Table<'a>>,
     gdef: Option<gdef::Table<'a>>,
     glyf: Option<&'a [u8]>,
+    gpos: Option<ggg::GsubGposTable<'a>>,
+    gsub: Option<ggg::GsubGposTable<'a>>,
     head: raw::head::Table<'a>,
     hhea: raw::hhea::Table<'a>,
     hmtx: Option<hmtx::Table<'a>>,
+    hvar: Option<&'a [u8]>,
     kern: Option<&'a [u8]>,
     loca: Option<loca::Table<'a>>,
+    mvar: Option<&'a [u8]>,
     name: Option<name::Names<'a>>,
     os_2: Option<os2::Table<'a>>,
     post: Option<post::Table<'a>>,
     vhea: Option<raw::vhea::Table<'a>>,
     vmtx: Option<hmtx::Table<'a>>,
     vorg: Option<vorg::Table<'a>>,
+    vvar: Option<&'a [u8]>,
     number_of_glyphs: NonZeroU16,
 }
 
@@ -367,10 +539,18 @@ impl<'a> Font<'a> {
         let tables = s.read_array::<raw::TableRecord, u16>(num_tables)?;
 
         let mut cff_ = None;
+        let mut cff2 = None;
         let mut gdef = None;
+        let mut gpos = None;
+        let mut gsub = None;
+        let mut hvar = None;
+        let mut mvar = None;
         let mut os_2 = None;
         let mut vorg = None;
+        let mut vvar = None;
+        let mut avar = None;
         let mut cmap = None;
+        let mut fvar = None;
         let mut glyf = None;
         let mut head = None;
         let mut hhea = None;
@@ -389,12 +569,20 @@ impl<'a> Font<'a> {
 
             // It's way faster to compare `[u8; 4]` with `&[u8]`
             // rather than `&[u8]` with `&[u8]`.
-            match &table.table_tag() {
+            match &table.table_tag().to_bytes() {
                 b"CFF " => cff_ = data.get(range).and_then(|data| cff::parse_metadata(data)),
+                b"CFF2" => cff2 = data.get(range).and_then(|data| cff2::parse_metadata(data)),
                 b"GDEF" => gdef = data.get(range).and_then(|data| gdef::Table::parse(data)),
+                b"GPOS" => gpos = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
+                b"GSUB" => gsub = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
+                b"HVAR" => hvar = data.get(range),
+                b"MVAR" => mvar = data.get(range),
                 b"OS/2" => os_2 = data.get(range).and_then(|data| os2::Table::parse(data)),
                 b"VORG" => vorg = data.get(range).and_then(|data| vorg::Table::parse(data)),
+                b"VVAR" => vvar = data.get(range),
+                b"avar" => avar = data.get(range),
                 b"cmap" => cmap = data.get(range).and_then(|data| cmap::Table::parse(data)),
+                b"fvar" => fvar = data.get(range).and_then(|data| fvar::Table::parse(data)),
                 b"glyf" => glyf = data.get(range),
                 b"head" => head = data.get(range).and_then(|data| raw::head::Table::parse(data)),
                 b"hhea" => hhea = data.get(range).and_then(|data| raw::hhea::Table::parse(data)),
@@ -417,21 +605,29 @@ impl<'a> Font<'a> {
         let number_of_glyphs = maxp.number_of_glyphs;
 
         let mut font = Font {
+            avar,
             cff_,
+            cff2,
             cmap,
+            fvar,
             gdef,
             glyf,
+            gpos,
+            gsub,
             head,
             hhea,
             hmtx: None,
+            hvar,
             kern,
             loca: None,
+            mvar,
             name,
             os_2,
             post,
             vhea,
             vmtx: None,
             vorg,
+            vvar,
             number_of_glyphs,
         };
 
@@ -465,17 +661,25 @@ impl<'a> Font<'a> {
             TableName::Header                       => true,
             TableName::HorizontalHeader             => true,
             TableName::MaximumProfile               => true,
+            TableName::AxisVariations               => self.avar.is_some(),
             TableName::CharacterToGlyphIndexMapping => self.cmap.is_some(),
             TableName::CompactFontFormat            => self.cff_.is_some(),
+            TableName::CompactFontFormat2           => self.cff2.is_some(),
+            TableName::FontVariations               => self.fvar.is_some(),
             TableName::GlyphData                    => self.glyf.is_some(),
             TableName::GlyphDefinition              => self.gdef.is_some(),
+            TableName::GlyphPositioning             => self.gpos.is_some(),
+            TableName::GlyphSubstitution            => self.gsub.is_some(),
             TableName::HorizontalMetrics            => self.hmtx.is_some(),
+            TableName::HorizontalMetricsVariations  => self.hvar.is_some(),
             TableName::IndexToLocation              => self.loca.is_some(),
             TableName::Kerning                      => self.kern.is_some(),
+            TableName::MetricsVariations            => self.mvar.is_some(),
             TableName::Naming                       => self.name.is_some(),
             TableName::PostScript                   => self.post.is_some(),
             TableName::VerticalHeader               => self.vhea.is_some(),
             TableName::VerticalMetrics              => self.vmtx.is_some(),
+            TableName::VerticalMetricsVariations    => self.vvar.is_some(),
             TableName::VerticalOrigin               => self.vorg.is_some(),
             TableName::WindowsMetrics               => self.os_2.is_some(),
         }
@@ -553,6 +757,10 @@ impl<'a> Font<'a> {
             return self.cff_glyph_outline(metadata, glyph_id, builder);
         }
 
+        if let Some(ref metadata) = self.cff2 {
+            return self.cff2_glyph_outline(metadata, glyph_id, builder);
+        }
+
         None
     }
 
@@ -583,6 +791,10 @@ impl<'a> Font<'a> {
             return self.cff_glyph_outline(metadata, glyph_id, &mut DummyOutline);
         }
 
+        if let Some(ref metadata) = self.cff2 {
+            return self.cff2_glyph_outline(metadata, glyph_id, &mut DummyOutline);
+        }
+
         None
     }
 }
@@ -600,7 +812,7 @@ impl fmt::Debug for Font<'_> {
 pub fn fonts_in_collection(data: &[u8]) -> Option<u32> {
     let table = raw::TTCHeader::new(data.get(0..raw::TTCHeader::SIZE)?);
 
-    if &table.ttc_tag() != b"ttcf" {
+    if &table.ttc_tag().to_bytes() != b"ttcf" {
         return None;
     }
 

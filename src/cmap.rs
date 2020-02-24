@@ -21,6 +21,7 @@ impl<'a> Table<'a> {
     }
 }
 
+
 impl<'a> Font<'a> {
     /// Resolves Glyph ID for code point.
     ///
@@ -30,7 +31,7 @@ impl<'a> Font<'a> {
     pub fn glyph_index(&self, c: char) -> Option<GlyphId> {
         let table = self.cmap?;
         for record in table.records {
-            let subtable_data = table.data.get(record.offset().0 as usize..)?;
+            let subtable_data = table.data.get(record.offset().to_usize()..)?;
             let mut s = Stream::new(subtable_data);
             let format = match parse_format(s.read()?) {
                 Some(format) => format,
