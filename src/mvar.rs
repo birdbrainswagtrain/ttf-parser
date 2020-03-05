@@ -18,9 +18,8 @@ impl<'a> Font<'a> {
     pub fn metrics_variation(&self, tag: Tag, coordinates: &[i32]) -> Option<f32> {
         let mut s = Stream::new(self.mvar?);
 
-        let major_version: u16 = s.read()?;
-        let minor_version: u16 = s.read()?;
-        if !(major_version == 1 && minor_version == 0) {
+        let version: u32 = s.read()?;
+        if version != 0x00010000 {
             return None;
         }
 

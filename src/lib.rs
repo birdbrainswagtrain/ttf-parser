@@ -5,7 +5,7 @@ A high-level, safe, zero-allocation TrueType font parser.
 
 - A high-level API, for people who doesn't know how TrueType works internally.
   Basically, no direct access to font tables.
-- Zero allocations.
+- Zero heap allocations.
 - Zero unsafe.
 - Zero required dependencies. Logging is enabled by default.
 - `no_std` compatible.
@@ -208,6 +208,7 @@ mod ggg;
 mod glyf;
 mod gpos;
 mod gsub;
+mod gvar;
 mod head;
 mod hhea;
 mod hmtx;
@@ -261,6 +262,7 @@ impl Default for GlyphId {
 
 
 /// A 4-byte tag.
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tag(pub u32);
 
@@ -398,6 +400,7 @@ pub struct LineMetrics {
 
 
 /// A rectangle.
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug)]
 #[allow(missing_docs)]
 pub struct Rect {
@@ -405,6 +408,62 @@ pub struct Rect {
     pub y_min: i16,
     pub x_max: i16,
     pub y_max: i16,
+}
+
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct BBox {
+    x_min: f32,
+    y_min: f32,
+    x_max: f32,
+    y_max: f32,
+}
+
+impl BBox {
+    #[inline]
+    fn new() -> Self {
+        BBox {
+            x_min: core::f32::MAX,
+            y_min: core::f32::MAX,
+            x_max: core::f32::MIN,
+            y_max: core::f32::MIN,
+        }
+    }
+
+    #[inline]
+    fn is_default(&self) -> bool {
+        self.x_min == core::f32::MAX &&
+        self.y_min == core::f32::MAX &&
+        self.x_max == core::f32::MIN &&
+        self.y_max == core::f32::MIN
+    }
+
+    #[inline]
+    fn extend_by(&mut self, x: f32, y: f32) {
+        self.x_min = self.x_min.min(x);
+        self.y_min = self.y_min.min(y);
+        self.x_max = self.x_max.max(x);
+        self.y_max = self.y_max.max(y);
+    }
+
+    #[inline]
+    fn to_rect(&self) -> Option<Rect> {
+        #[inline]
+        fn try_f32_to_i16(n: f32) -> Option<i16> {
+            if n >= core::i16::MIN as f32 && n <= core::i16::MAX as f32 {
+                Some(n as i16)
+            } else {
+                None
+            }
+        }
+
+        Some(Rect {
+            x_min: try_f32_to_i16(self.x_min)?,
+            y_min: try_f32_to_i16(self.y_min)?,
+            x_max: try_f32_to_i16(self.x_max)?,
+            y_max: try_f32_to_i16(self.y_max)?,
+        })
+    }
 }
 
 
@@ -444,6 +503,7 @@ pub enum TableName {
     GlyphDefinition,
     GlyphPositioning,
     GlyphSubstitution,
+    GlyphVariations,
     Header,
     HorizontalHeader,
     HorizontalMetrics,
@@ -474,6 +534,7 @@ pub struct Font<'a> {
     glyf: Option<&'a [u8]>,
     gpos: Option<ggg::GsubGposTable<'a>>,
     gsub: Option<ggg::GsubGposTable<'a>>,
+    gvar: Option<gvar::Table<'a>>,
     head: raw::head::Table<'a>,
     hhea: raw::hhea::Table<'a>,
     hmtx: Option<hmtx::Table<'a>>,
@@ -544,6 +605,7 @@ impl<'a> Font<'a> {
         let mut gpos = None;
         let mut gsub = None;
         let mut hvar = None;
+        let mut gvar = None;
         let mut mvar = None;
         let mut os_2 = None;
         let mut vorg = None;
@@ -584,6 +646,7 @@ impl<'a> Font<'a> {
                 b"cmap" => cmap = data.get(range).and_then(|data| cmap::Table::parse(data)),
                 b"fvar" => fvar = data.get(range).and_then(|data| fvar::Table::parse(data)),
                 b"glyf" => glyf = data.get(range),
+                b"gvar" => gvar = data.get(range).and_then(|data| gvar::Table::parse(data)),
                 b"head" => head = data.get(range).and_then(|data| raw::head::Table::parse(data)),
                 b"hhea" => hhea = data.get(range).and_then(|data| raw::hhea::Table::parse(data)),
                 b"hmtx" => hmtx = data.get(range),
@@ -612,6 +675,7 @@ impl<'a> Font<'a> {
             fvar,
             gdef,
             glyf,
+            gvar,
             gpos,
             gsub,
             head,
@@ -670,6 +734,7 @@ impl<'a> Font<'a> {
             TableName::GlyphDefinition              => self.gdef.is_some(),
             TableName::GlyphPositioning             => self.gpos.is_some(),
             TableName::GlyphSubstitution            => self.gsub.is_some(),
+            TableName::GlyphVariations              => self.gvar.is_some(),
             TableName::HorizontalMetrics            => self.hmtx.is_some(),
             TableName::HorizontalMetricsVariations  => self.hvar.is_some(),
             TableName::IndexToLocation              => self.loca.is_some(),
@@ -683,6 +748,13 @@ impl<'a> Font<'a> {
             TableName::VerticalOrigin               => self.vorg.is_some(),
             TableName::WindowsMetrics               => self.os_2.is_some(),
         }
+    }
+
+    /// Checks if font is a variable font.
+    #[inline]
+    pub fn is_variable(&self) -> bool {
+        // `fvar::Table::parse` already checked that `axisCount` is non-zero.
+        self.fvar.is_some()
     }
 
     /// Returns a total number of glyphs in the font.
@@ -699,10 +771,10 @@ impl<'a> Font<'a> {
     ///
     /// **Warning**: since `ttf-parser` is a pull parser,
     /// `OutlineBuilder` will emit segments even when outline is partially malformed.
-    /// You must check `outline_glyph()` result for error before using
+    /// You must check `outline_glyph()` result before using
     /// `OutlineBuilder`'s output.
     ///
-    /// This method supports `glyf`, `CFF` and `CFF2` tables.
+    /// This method supports `glyf`, `gvar`, `CFF` and `CFF2` tables.
     ///
     /// Returns `None` when glyph has no outline.
     ///
@@ -760,6 +832,37 @@ impl<'a> Font<'a> {
         if let Some(ref metadata) = self.cff2 {
             return self.cff2_glyph_outline(metadata, glyph_id, builder);
         }
+
+        None
+    }
+
+    /// Outlines a variable glyph and returns its tight bounding box.
+    ///
+    /// Note: coordinates should be converted from fixed point 2.14 to i32
+    /// by multiplying each coordinate by 16384.
+    ///
+    /// Number of `coordinates` should be the same as number of variation axes in the font.
+    ///
+    /// **Warning**: since `ttf-parser` is a pull parser,
+    /// `OutlineBuilder` will emit segments even when outline is partially malformed.
+    /// You must check `outline_variable_glyph()` result before using
+    /// `OutlineBuilder`'s output.
+    ///
+    /// This method supports `glyf` + `gvar` and `CFF2` tables.
+    ///
+    /// Returns `None` when glyph has no outline or when font is not variable.
+    #[inline]
+    pub fn outline_variable_glyph(
+        &self,
+        glyph_id: GlyphId,
+        coordinates: &[i32],
+        builder: &mut dyn OutlineBuilder,
+    ) -> Option<Rect> {
+        if self.is_variable() && self.gvar.is_some() {
+            return self.glyf_glyph_outline_var(glyph_id, coordinates, builder);
+        }
+
+        // TODO: cff2
 
         None
     }

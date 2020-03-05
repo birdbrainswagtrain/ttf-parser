@@ -88,9 +88,8 @@ pub fn glyph_advance_variation(
 ) -> Option<f32> {
     let mut s = Stream::new(data);
 
-    let major_version: u16 = s.read()?;
-    let minor_version: u16 = s.read()?;
-    if !(major_version == 1 && minor_version == 0) {
+    let version: u32 = s.read()?;
+    if version != 0x00010000 {
         return None;
     }
 
@@ -116,9 +115,8 @@ pub fn glyph_side_bearing_variation(
 ) -> Option<f32> {
     let mut s = Stream::new(data);
 
-    let major_version: u16 = s.read()?;
-    let minor_version: u16 = s.read()?;
-    if !(major_version == 1 && minor_version == 0) {
+    let version: u32 = s.read()?;
+    if version != 0x00010000 {
         return None;
     }
 

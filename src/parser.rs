@@ -1,3 +1,5 @@
+use core::ops::Range;
+
 /// A trait for parsing raw binary data.
 ///
 /// This is a low-level, internal trait that should not be used directly.
@@ -80,14 +82,19 @@ impl FromData for U24 {
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otff#data-types
 #[derive(Clone, Copy, Debug)]
-pub struct F2DOT14(pub f32);
+pub struct F2DOT14(pub i16);
+
+impl F2DOT14 {
+    #[inline]
+    pub fn to_float(&self) -> f32 {
+        self.0 as f32 / 16384.0
+    }
+}
 
 impl FromData for F2DOT14 {
-    const SIZE: usize = 2;
-
     #[inline]
     fn parse(data: &[u8]) -> Self {
-        F2DOT14(i16::parse(data) as f32 / 16384.0)
+        F2DOT14(i16::parse(data))
     }
 }
 
@@ -222,6 +229,17 @@ impl<'a, T: FromData, Idx: ArraySize> LazyArray<'a, T, Idx> {
 
     /// Returns array's length.
     #[inline]
+    pub fn slice(&self, range: Range<Idx>) -> Option<Self> {
+        let start = range.start.to_usize() * T::SIZE;
+        let end = range.end.to_usize() * T::SIZE;
+        Some(LazyArray {
+            data: self.data.get(start..end)?,
+            ..LazyArray::default()
+        })
+    }
+
+    /// Returns array's length.
+    #[inline]
     pub fn len(&self) -> Idx {
         Idx::from_usize(self.data.len() / T::SIZE)
     }
@@ -304,6 +322,15 @@ pub struct LazyArrayIter<'a, T, Idx: ArraySize> {
     index: Idx,
 }
 
+impl<T, Idx: ArraySize> Default for LazyArrayIter<'_, T, Idx> {
+    fn default() -> Self {
+        LazyArrayIter {
+            data: LazyArray::default(),
+            index: Idx::ZERO,
+        }
+    }
+}
+
 impl<'a, T: FromData, Idx: ArraySize> Iterator for LazyArrayIter<'a, T, Idx> {
     type Item = T;
 
@@ -311,6 +338,11 @@ impl<'a, T: FromData, Idx: ArraySize> Iterator for LazyArrayIter<'a, T, Idx> {
     fn next(&mut self) -> Option<Self::Item> {
         self.index += Idx::ONE;
         self.data.get(self.index - Idx::ONE)
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.data.len().to_usize()
     }
 
     #[inline]
@@ -351,7 +383,12 @@ impl<'a> Stream<'a> {
 
     #[inline]
     pub fn at_end(&self) -> bool {
-        self.offset == self.data.len()
+        self.offset >= self.data.len()
+    }
+
+    #[inline]
+    pub fn jump_to_end(&mut self) {
+        self.offset = self.data.len();
     }
 
     #[inline]
@@ -372,6 +409,16 @@ impl<'a> Stream<'a> {
     #[inline]
     pub fn advance<L: ArraySize>(&mut self, len: L) {
         self.offset += len.to_usize();
+    }
+
+    #[inline]
+    pub fn advance_checked<L: ArraySize>(&mut self, len: L) -> Option<()> {
+        if self.offset + len.to_usize() <= self.data.len() {
+            self.offset += len.to_usize();
+            Some(())
+        } else {
+            None
+        }
     }
 
     #[inline]

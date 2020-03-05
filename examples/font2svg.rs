@@ -1,27 +1,88 @@
+use std::path::PathBuf;
+
 use ttf_parser as ttf;
 use svgtypes::WriteBuffer;
+use log::warn;
 
 const FONT_SIZE: f64 = 128.0;
-const COLUMNS: u32 = 50;
+const COLUMNS: u32 = 100;
+
+const HELP: &str = "\
+Usage:
+    font2svg font.ttf out.svg
+    font2svg --variations 'wght:500;wdth:200' font.ttf out.svg
+";
+
+struct Variation {
+    tag: ttf::Tag,
+    value: f32,
+}
+
+struct Args {
+    variations: Option<Vec<Variation>>,
+    ttf_path: PathBuf,
+    svg_path: PathBuf,
+}
 
 fn main() {
     std::env::set_var("RUST_LOG", "warn");
     env_logger::init();
 
-    if let Err(e) = process() {
+    let args = match parse_args() {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("Error: {}.", e);
+            print!("{}", HELP);
+            std::process::exit(1);
+        }
+    };
+
+    if let Err(e) = process(args) {
         eprintln!("Error: {}.", e);
         std::process::exit(1);
     }
 }
 
-fn process() -> Result<(), Box<dyn std::error::Error>> {
-    let args: Vec<_> = std::env::args().collect();
-    if args.len() != 3 {
-        println!("Usage:\n\tfont2svg font.ttf out.svg");
-        std::process::exit(1);
+fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
+    let mut args = pico_args::Arguments::from_env();
+
+    if args.contains(["-h", "--help"]) {
+        print!("{}", HELP);
+        std::process::exit(0);
     }
 
-    let font_data = std::fs::read(&args[1])?;
+    let variations = args.opt_value_from_fn("--variations", parse_variations)?;
+    let free = args.free()?;
+    if free.len() != 2 {
+        return Err("invalid number of arguments".into());
+    }
+
+    Ok(Args {
+        variations,
+        ttf_path: PathBuf::from(&free[0]),
+        svg_path: PathBuf::from(&free[1]),
+    })
+}
+
+fn parse_variations(s: &str) -> Result<Vec<Variation>, &'static str> {
+    let mut variations = Vec::new();
+    for part in s.split(';') {
+        let mut iter = part.split(':');
+
+        let tag = iter.next().ok_or("failed to parse a variation")?;
+        let tag = ttf::Tag::from_bytes_lossy(tag.as_bytes());
+
+        let value = iter.next().ok_or("failed to parse a variation")?;
+        let value: f32 = value.parse().map_err(|_| "failed to parse a variation")?;
+
+        variations.push(Variation { tag, value });
+    }
+
+    Ok(variations)
+}
+
+fn process(args: Args) -> Result<(), Box<dyn std::error::Error>> {
+    let font_data = std::fs::read(&args.ttf_path)?;
 
     // Exclude IO operations.
     let now = std::time::Instant::now();
@@ -32,6 +93,41 @@ fn process() -> Result<(), Box<dyn std::error::Error>> {
 
     let cell_size = font.height() as f64 * FONT_SIZE / units_per_em as f64;
     let rows = (font.number_of_glyphs() as f64 / COLUMNS as f64).ceil() as u32;
+
+    let var_coords = if font.is_variable() {
+        let coords_len = font.variation_axes().count();
+        let mut coords = vec![0; coords_len];
+
+        if let Some(variations) = args.variations {
+            for variation in variations {
+                let v = font.variation_axes().enumerate().find(|(_, axis)| axis.tag == variation.tag);
+                if let Some((idx, axis)) = v {
+                    let mut v = f32_bound(axis.min_value, variation.value, axis.max_value);
+
+                    if v == axis.default_value {
+                        v = 0.0;
+                    } else if v < axis.default_value {
+                        v = (v - axis.default_value) / (axis.default_value - axis.min_value);
+                    } else {
+                        v = (v - axis.default_value) / (axis.max_value - axis.default_value);
+                    }
+
+                    coords[idx] = (v * 16384.0).round() as i32;
+                } else {
+                    warn!("Font doesn't have a '{}' axis.", variation.tag);
+                }
+            }
+
+            if font.has_table(ttf::TableName::AxisVariations) {
+                font.map_variation_coordinates(&mut coords)
+                    .ok_or("failed to map variation coordinates")?;
+            }
+        }
+
+        coords
+    } else {
+        Vec::new()
+    };
 
     let mut svg = xmlwriter::XmlWriter::with_capacity(
         font.number_of_glyphs() as usize * 512,
@@ -57,6 +153,7 @@ fn process() -> Result<(), Box<dyn std::error::Error>> {
             ttf::GlyphId(id),
             cell_size,
             scale,
+            &var_coords,
             &mut svg,
             &mut path_buf,
         );
@@ -70,7 +167,7 @@ fn process() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("Elapsed: {}ms", now.elapsed().as_micros() as f64 / 1000.0);
 
-    std::fs::write(&args[2], &svg.end_document())?;
+    std::fs::write(&args.svg_path, &svg.end_document())?;
 
     Ok(())
 }
@@ -118,6 +215,7 @@ fn glyph_to_path(
     glyph_id: ttf::GlyphId,
     cell_size: f64,
     scale: f64,
+    var_coords: &[i32],
     svg: &mut xmlwriter::XmlWriter,
     path_buf: &mut svgtypes::Path,
 ) {
@@ -131,9 +229,16 @@ fn glyph_to_path(
 
     path_buf.clear();
     let mut builder = Builder(path_buf);
-    let bbox = match font.outline_glyph(glyph_id, &mut builder) {
-        Some(v) => v,
-        None => return,
+    let bbox = if font.is_variable() {
+        match font.outline_variable_glyph(glyph_id, var_coords, &mut builder) {
+            Some(v) => v,
+            None => return,
+        }
+    } else {
+        match font.outline_glyph(glyph_id, &mut builder) {
+            Some(v) => v,
+            None => return,
+        }
     };
 
     let bbox_w = (bbox.x_max as f64 - bbox.x_min as f64) * scale;
@@ -188,4 +293,20 @@ impl ttf::OutlineBuilder for Builder<'_> {
     fn close(&mut self) {
         self.0.push_close_path();
     }
+}
+
+
+#[inline]
+fn f32_bound(min: f32, val: f32, max: f32) -> f32 {
+    debug_assert!(min.is_finite());
+    debug_assert!(val.is_finite());
+    debug_assert!(max.is_finite());
+
+    if val > max {
+        return max;
+    } else if val < min {
+        return min;
+    }
+
+    val
 }

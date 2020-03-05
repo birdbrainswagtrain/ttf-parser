@@ -4,13 +4,13 @@
 
 use core::ops::Range;
 
-use crate::{Font, GlyphId, OutlineBuilder, Rect};
+use crate::{Font, GlyphId, OutlineBuilder, Rect, BBox};
 use crate::parser::{Stream, LazyArray16};
 
 use crate::cff::{
-    Builder, RectF, DataIndex, IsEven, Operator,
+    Builder, DataIndex, IsEven, Operator,
     ArgumentsStack, OutlineBuilderInner, CFFError,
-    calc_subroutine_bias, f32_abs, parse_number, skip_number, parse_index_impl, try_f32_to_i16,
+    calc_subroutine_bias, f32_abs, parse_number, skip_number, parse_index_impl,
     is_dict_one_byte_op
 };
 
@@ -172,6 +172,7 @@ impl<'a> Font<'a> {
         let data = metadata.char_strings.get(glyph_id.0)?;
         match parse_char_string(data, metadata, builder) {
             Ok(bbox) => Some(bbox),
+            Err(CFFError::ZeroBBox) => None,
             #[allow(unused_variables)]
             Err(e) => {
                 warn!("Glyph {} parsing failed cause {}.", glyph_id.0, e);
@@ -327,7 +328,7 @@ fn parse_char_string(
 
     let mut inner_builder = Builder {
         builder,
-        bbox: RectF {
+        bbox: BBox {
             x_min: core::f32::MAX,
             y_min: core::f32::MAX,
             x_max: core::f32::MIN,
@@ -345,20 +346,11 @@ fn parse_char_string(
     let bbox = inner_builder.bbox;
 
     // Check that bbox was changed.
-    if bbox.x_min == core::f32::MAX &&
-        bbox.y_min == core::f32::MAX &&
-        bbox.x_max == core::f32::MIN &&
-        bbox.y_max == core::f32::MIN
-    {
+    if bbox.is_default() {
         return Err(CFFError::ZeroBBox);
     }
 
-    Ok(Rect {
-        x_min: try_f32_to_i16(bbox.x_min)?,
-        y_min: try_f32_to_i16(bbox.y_min)?,
-        x_max: try_f32_to_i16(bbox.x_max)?,
-        y_max: try_f32_to_i16(bbox.y_max)?,
-    })
+    bbox.to_rect().ok_or(CFFError::BboxOverflow)
 }
 
 // TODO: It would be great to merge this with CFF, but we need const generics first.

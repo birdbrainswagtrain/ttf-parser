@@ -14,10 +14,9 @@ impl<'a> Font<'a> {
     /// Number of `coordinates` should be the same as number of variation axes in the font.
     pub fn map_variation_coordinates(&self, coordinates: &mut [i32]) -> Option<()> {
         let mut s = Stream::new(self.avar?);
-        let major_version: u16 = s.read()?;
-        let minor_version: u16 = s.read()?;
 
-        if !(major_version == 1 && minor_version == 0) {
+        let version: u32 = s.read()?;
+        if version != 0x00010000 {
             return None;
         }
 

@@ -3,16 +3,16 @@
 use core::num::NonZeroU16;
 
 use crate::{Font, Tag};
-use crate::parser::{Stream, Offset16, Offset, LazyArray16};
+use crate::parser::{Stream, Offset16, Offset, LazyArray16, LazyArrayIter};
 use crate::raw::fvar as raw;
 
 
 /// A [variation axis](https://docs.microsoft.com/en-us/typography/opentype/spec/fvar#variationaxisrecord).
 #[allow(missing_docs)]
+#[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct VariationAxis {
-    /// Axis index in `fvar` table.
-    pub index: u16,
+    pub tag: Tag,
     pub min_value: f32,
     pub default_value: f32,
     pub max_value: f32,
@@ -24,7 +24,6 @@ pub struct VariationAxis {
 
 #[derive(Clone, Copy)]
 pub(crate) struct Table<'a> {
-    axis_count: NonZeroU16,
     axes: LazyArray16<'a, raw::VariationAxisRecord>,
 }
 
@@ -48,39 +47,49 @@ impl<'a> Table<'a> {
         let mut s = Stream::new_at(data, axes_array_offset.to_usize());
         let axes = s.read_array(axis_count.get())?;
 
-        Some(Table {
-            axis_count,
-            axes,
-        })
+        Some(Table { axes })
     }
 }
 
 
-impl<'a> Font<'a> {
-    /// Parses a number of variation axes.
-    ///
-    /// Returns `None` when font is not a variable font.
-    /// Number of axis is never 0.
-    pub fn variation_axes_count(&self) -> Option<NonZeroU16> {
-        self.fvar.map(|fvar| fvar.axis_count)
-    }
+#[allow(missing_debug_implementations)]
+#[derive(Clone, Copy, Default)]
+pub struct VariationAxes<'a> {
+    iter: LazyArrayIter<'a, raw::VariationAxisRecord, u16>,
+}
 
-    /// Parses a variation axis by tag.
-    pub fn variation_axis(&self, tag: Tag) -> Option<VariationAxis> {
-        let (index, record) = self.fvar?.axes.into_iter()
-            .enumerate().find(|(_, r)| r.axis_tag() == tag)?;
+impl<'a> Iterator for VariationAxes<'a> {
+    type Item = VariationAxis;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        let record = self.iter.next()?;
 
         let default_value = record.default_value();
         let min_value = core::cmp::min(default_value, record.min_value());
         let max_value = core::cmp::max(default_value, record.max_value());
 
         Some(VariationAxis {
-            index: index as u16,
+            tag: record.axis_tag(),
             min_value: min_value as f32 / 65536.0,
             default_value: default_value as f32 / 65536.0,
             max_value: max_value as f32 / 65536.0,
             name_id: record.axis_name_id(),
             hidden: (record.flags() >> 3) & 1 == 1,
         })
+    }
+
+    #[inline]
+    fn count(self) -> usize {
+        self.iter.count()
+    }
+}
+
+
+impl<'a> Font<'a> {
+    /// Returns an iterator over variation axes.
+    pub fn variation_axes(&self) -> VariationAxes {
+        self.fvar.map(|fvar| VariationAxes { iter: fvar.axes.into_iter() })
+            .unwrap_or_default()
     }
 }

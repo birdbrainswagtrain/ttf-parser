@@ -6,7 +6,7 @@
 use core::ops::Range;
 
 use crate::parser::{Stream, U24, FromData};
-use crate::{Font, GlyphId, OutlineBuilder, Rect};
+use crate::{Font, GlyphId, OutlineBuilder, Rect, BBox};
 
 // Limits according to the Adobe Technical Note #5176, chapter 4 DICT Data.
 const MAX_OPERANDS_LEN: usize = 48;
@@ -308,12 +308,7 @@ fn parse_char_string(
 
     let mut inner_builder = Builder {
         builder,
-        bbox: RectF {
-            x_min: core::f32::MAX,
-            y_min: core::f32::MAX,
-            x_max: core::f32::MIN,
-            y_max: core::f32::MIN,
-        }
+        bbox: BBox::new(),
     };
 
     let mut stack = ArgumentsStack {
@@ -330,78 +325,44 @@ fn parse_char_string(
     let bbox = inner_builder.bbox;
 
     // Check that bbox was changed.
-    if bbox.x_min == core::f32::MAX &&
-       bbox.y_min == core::f32::MAX &&
-       bbox.x_max == core::f32::MIN &&
-       bbox.y_max == core::f32::MIN
-    {
+    if bbox.is_default() {
         return Err(CFFError::ZeroBBox);
     }
 
-    Ok(Rect {
-        x_min: try_f32_to_i16(bbox.x_min)?,
-        y_min: try_f32_to_i16(bbox.y_min)?,
-        x_max: try_f32_to_i16(bbox.x_max)?,
-        y_max: try_f32_to_i16(bbox.y_max)?,
-    })
+    bbox.to_rect().ok_or(CFFError::BboxOverflow)
 }
 
-pub fn try_f32_to_i16(n: f32) -> Result<i16, CFFError> {
-    if n >= core::i16::MIN as f32 && n <= core::i16::MAX as f32 {
-        Ok(n as i16)
-    } else {
-        Err(CFFError::BboxOverflow)
-    }
-}
-
-
-pub struct RectF {
-    pub x_min: f32,
-    pub y_min: f32,
-    pub x_max: f32,
-    pub y_max: f32,
-}
 
 pub trait OutlineBuilderInner {
-    fn update_bbox(&mut self, x: f32, y: f32);
     fn move_to(&mut self, x: f32, y: f32);
     fn line_to(&mut self, x: f32, y: f32);
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32);
     fn close(&mut self);
 }
 
-pub struct Builder<'a> {
+pub(crate) struct Builder<'a> {
     pub builder: &'a mut dyn OutlineBuilder,
-    pub bbox: RectF,
+    pub bbox: BBox,
 }
 
 impl<'a> OutlineBuilderInner for Builder<'a> {
     #[inline]
-    fn update_bbox(&mut self, x: f32, y: f32) {
-        self.bbox.x_min = self.bbox.x_min.min(x);
-        self.bbox.y_min = self.bbox.y_min.min(y);
-
-        self.bbox.x_max = self.bbox.x_max.max(x);
-        self.bbox.y_max = self.bbox.y_max.max(y);
-    }
-
-    #[inline]
     fn move_to(&mut self, x: f32, y: f32) {
-        self.update_bbox(x, y);
+        self.bbox.extend_by(x, y);
         self.builder.move_to(x, y);
     }
 
     #[inline]
     fn line_to(&mut self, x: f32, y: f32) {
-        self.update_bbox(x, y);
+        self.bbox.extend_by(x, y);
         self.builder.line_to(x, y);
     }
 
     #[inline]
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
-        self.update_bbox(x1, y1);
-        self.update_bbox(x2, y2);
-        self.update_bbox(x, y);
+        self.bbox.extend_by(x1, y1);
+        self.bbox.extend_by(x2, y2);
+        self.bbox.extend_by(x, y);
         self.builder.curve_to(x1, y1, x2, y2, x, y);
     }
 
