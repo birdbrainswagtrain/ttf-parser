@@ -72,11 +72,6 @@ impl<'a> Builder<'a> {
         self.builder.quad_to(x1, y1, x, y);
     }
 
-    #[inline]
-    fn close(&mut self) {
-        self.builder.close();
-    }
-
     // Useful links:
     //
     // - https://developer.apple.com/fonts/TrueType-Reference-Manual/RM01/Chap1.html
@@ -137,19 +132,17 @@ impl<'a> Builder<'a> {
             self.line_to(p.x, p.y);
         }
 
-        self.close();
-
         self.first_oncurve = None;
         self.first_offcurve = None;
         self.last_offcurve = None;
 
-        self.close();
+        self.builder.close();
     }
 }
 
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/glyf#simple-glyph-description
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct SimpleGlyphFlags(pub u8);
 
 impl SimpleGlyphFlags {
@@ -304,6 +297,10 @@ pub fn parse_simple_outline(
 
     let mut endpoints = endpoints.into_iter();
     let contour_points_left = endpoints.next()?;
+
+    if contour_points_left < 2 && number_of_contours.get() == 1 {
+        return Some(GlyphPoints::default());
+    }
 
     Some(GlyphPoints {
         endpoints: endpoints.into_iter(),
@@ -506,7 +503,7 @@ pub struct GlyphPoint {
 }
 
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct GlyphPoints<'a> {
     endpoints: LazyArrayIter<'a, u16, u16>, // Each endpoint indicates a contour end.
     flags: Stream<'a>,

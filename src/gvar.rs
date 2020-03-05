@@ -751,7 +751,6 @@ mod packed_points {
 
     #[cfg(test)]
     mod tests {
-        use std::vec::Vec;
         use super::*;
 
         #[test]
@@ -763,9 +762,7 @@ mod packed_points {
         #[test]
         fn single_zero_control() {
             let mut s = Stream::new(&[0]);
-            let iter = PackedPointsIter::new(&mut s).unwrap();
-            let points: Vec<u16> = iter.collect();
-            assert_eq!(points, []);
+            assert!(PackedPointsIter::new(&mut s).unwrap().is_none());
         }
 
         // TODO: more tests

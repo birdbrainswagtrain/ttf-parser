@@ -358,7 +358,7 @@ impl<T: FromData, Idx: ArraySize> core::fmt::Debug for LazyArrayIter<'_, T, Idx>
 }
 
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct Stream<'a> {
     data: &'a [u8],
     offset: usize,
