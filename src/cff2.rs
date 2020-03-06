@@ -8,8 +8,7 @@ use crate::{Font, GlyphId, OutlineBuilder, Rect, BBox};
 use crate::parser::{Stream, LazyArray16};
 
 use crate::cff::{
-    Builder, DataIndex, IsEven, Operator,
-    ArgumentsStack, OutlineBuilderInner, CFFError,
+    Builder, DataIndex, IsEven, Operator, ArgumentsStack, CFFError,
     calc_subroutine_bias, f32_abs, parse_number, skip_number, parse_index_impl,
     is_dict_one_byte_op
 };

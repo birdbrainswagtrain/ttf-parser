@@ -11,12 +11,12 @@ A high-level, safe, zero-allocation TrueType font parser.
 
 - A high-level API, for people who doesn't know how TrueType works internally.
   Basically, no direct access to font tables.
-- Zero allocations.
+- Zero heap allocations.
 - Zero unsafe.
 - Zero required dependencies. Logging is enabled by default.
 - `no_std` compatible.
 - Fast.
-- Stateless.
+- Stateless. No mutable methods.
 - Simple and maintainable code (no magic numbers).
 
 ### Supported TrueType features
@@ -123,13 +123,15 @@ and [Compact Font Format](http://wwwimages.adobe.com/content/dam/Adobe/en/devnet
 The first one is fairly simple which makes it faster to process.
 The second one is basically a tiny language with a stack-based VM, which makes it way harder to process.
 
+The benchmark tests how long it takes to outline all glyphs in the font.
+
 ```
 test outline_cff  ... bench:   1,293,929 ns/iter (+/- 7,798)
 test outline_cff2 ... bench:   1,847,932 ns/iter (+/- 13,006)
 test outline_glyf ... bench:     764,206 ns/iter (+/- 5,716)
 ```
 
-Here is some methods benchmarks:
+And here are some methods benchmarks:
 
 ```
 test outline_glyph_276_from_cff  ... bench:         877 ns/iter (+/- 265)
