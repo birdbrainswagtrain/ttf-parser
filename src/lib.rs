@@ -55,7 +55,8 @@ A high-level, safe, zero-allocation TrueType font parser.
 ## Supported OpenType features
 
 - (`CFF `) Glyph outlining using [outline_glyph()] method.
-- (`CFF2`) Glyph outlining using [outline_glyph()] method.
+- (`CFF2`) Variable glyph outlining using [outline_variable_glyph()] method.
+- (`gvar`) Variable glyph outlining using [outline_variable_glyph()] method.
 - (`OS/2`) Retrieving font's kind using [is_regular()], [is_italic()],
   [is_bold()] and [is_oblique()] methods.
 - (`OS/2`) Retrieving font's weight using [weight()] method.
@@ -68,7 +69,7 @@ A high-level, safe, zero-allocation TrueType font parser.
 - (`GDEF`) Retrieving glyph's mark attachment class using [glyph_mark_attachment_class()] method.
 - (`GDEF`) Checking that glyph is a mark using [is_mark_glyph()] method.
 - (`avar`) Variation coordinates normalization using [map_variation_coordinates()] method.
-- (`fvar`) Variation axis parsing using [variation_axis()] method.
+- (`fvar`) Variation axis parsing using [variation_axes()] method.
 - (`VORG`) Retrieving glyph's vertical origin using [glyph_y_origin()] method.
 - (`MVAR`) Retrieving font's metrics variation using [metrics_variation()] method.
 - (`HVAR`) Retrieving glyph's variation offset for horizontal advance using [glyph_hor_advance_variation()] method.
@@ -89,8 +90,9 @@ A high-level, safe, zero-allocation TrueType font parser.
 [glyph_class()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_class
 [glyph_mark_attachment_class()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_mark_attachment_class
 [is_mark_glyph()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.is_mark_glyph
+[outline_variable_glyph()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.outline_variable_glyph
 [map_variation_coordinates()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.map_variation_coordinates
-[variation_axis()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.variation_axis
+[variation_axes()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.variation_axis
 [glyph_y_origin()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_y_origin
 [metrics_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.metrics_variation
 [glyph_hor_advance_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_hor_advance_variation
