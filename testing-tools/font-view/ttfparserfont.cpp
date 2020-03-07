@@ -47,14 +47,14 @@ TtfParserFont::TtfParserFont()
 TtfParserFont::~TtfParserFont()
 {
     if (m_font) {
-        ttfp_font_destroy(m_font);
+        ttfp_destroy_font(m_font);
     }
 }
 
 void TtfParserFont::open(const QString &path, const quint32 index)
 {
     if (isOpen()) {
-        ttfp_font_destroy(m_font);
+        ttfp_destroy_font(m_font);
         m_font = nullptr;
     }
 
@@ -62,7 +62,7 @@ void TtfParserFont::open(const QString &path, const quint32 index)
     file.open(QFile::ReadOnly);
     m_fontData = file.readAll();
 
-    m_font = ttfp_font_create(m_fontData.constData(), m_fontData.size(), index);
+    m_font = ttfp_create_font((const uint8_t *)m_fontData.constData(), m_fontData.size(), index);
 
     if (!m_font) {
         throw tr("Failed to open a font.");
@@ -81,9 +81,9 @@ FontInfo TtfParserFont::fontInfo() const
     }
 
     return FontInfo {
-        ttfp_ascender(m_font),
-        ttfp_height(m_font),
-        ttfp_number_of_glyphs(m_font),
+        ttfp_get_ascender(m_font),
+        ttfp_get_height(m_font),
+        ttfp_get_number_of_glyphs(m_font),
     };
 }
 
@@ -101,7 +101,7 @@ Glyph TtfParserFont::outline(const quint16 gid) const
     builder.curve_to = outliner.curveToFn;
     builder.close_path = outliner.closePathFn;
 
-    ttfp_rect rawBbox;
+    ttfp_bbox rawBbox;
 
     const bool ok = ttfp_outline_variable_glyph(
         m_font,
@@ -155,7 +155,7 @@ QVector<VariationInfo> TtfParserFont::loadVariations()
             Tag(axis.tag).toString(),
             { static_cast<quint32>(axis.tag) },
             static_cast<qint16>(axis.min_value),
-            static_cast<qint16>(axis.default_value),
+            static_cast<qint16>(axis.def_value),
             static_cast<qint16>(axis.max_value),
         });
     }
@@ -178,12 +178,12 @@ void TtfParserFont::setVariations(const QVector<Variation> &variations)
         if (ttfp_get_variation_axis_by_tag(m_font, variation.tag.value, &axis)) {
             auto v = qBound(axis.min_value, (float)variation.value, axis.max_value);
 
-            if (qFuzzyCompare(v, axis.default_value)) {
+            if (qFuzzyCompare(v, axis.def_value)) {
                 v = 0.0;
-            } else if (v < axis.default_value) {
-                v = (v - axis.default_value) / (axis.default_value - axis.min_value);
+            } else if (v < axis.def_value) {
+                v = (v - axis.def_value) / (axis.def_value - axis.min_value);
             } else {
-                v = (v - axis.default_value) / (axis.max_value - axis.default_value);
+                v = (v - axis.def_value) / (axis.max_value - axis.def_value);
             }
 
             coords[i] = qRound(v * 16384.0f);

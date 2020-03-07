@@ -2,11 +2,11 @@ QT       += widgets
 
 CONFIG += c++14
 
-CONFIG(release, debug|release): LIBS += -L$$PWD/../ttfp-capi/target/release/ -lttfp
-else:CONFIG(debug, debug|release): LIBS += -L$$PWD/../ttfp-capi/target/debug/ -lttfp
+CONFIG(release, debug|release): LIBS += -L$$PWD/../../c-api/target/release/ -lttfparser
+else:CONFIG(debug, debug|release): LIBS += -L$$PWD/../../c-api/target/debug/ -lttfparser
 
-INCLUDEPATH += $$PWD/../ttfp-capi
-DEPENDPATH += $$PWD/../ttfp-capi
+INCLUDEPATH += $$PWD/../../c-api
+DEPENDPATH += $$PWD/../../c-api
 
 SOURCES += \
     glyphsview.cpp \

@@ -397,6 +397,30 @@ pub extern "C" fn ttfp_outline_glyph(
 }
 
 #[no_mangle]
+pub extern "C" fn ttfp_outline_variable_glyph(
+    font: *const ttfp_font,
+    raw_builder: ttfp_outline_builder,
+    user_data: *mut c_void,
+    glyph_id: GlyphId,
+    coordinates: *const i32,
+    coordinates_size: u32,
+    raw_bbox: *mut ttf_parser::Rect,
+) -> bool {
+    // This method invokes a lot of parsing, so let's catch any panics just in case.
+    std::panic::catch_unwind(|| {
+        let coordinates = unsafe { std::slice::from_raw_parts(coordinates, coordinates_size as usize) };
+        let mut builder = Builder(raw_builder, user_data);
+        match font_from_ptr(font).outline_variable_glyph(glyph_id, coordinates, &mut builder) {
+            Some(bbox) => {
+                unsafe { *raw_bbox = bbox }
+                true
+            }
+            None => false,
+        }
+    }).unwrap_or(false)
+}
+
+#[no_mangle]
 pub extern "C" fn ttfp_get_glyph_bbox(
     font: *const ttfp_font,
     glyph_id: GlyphId,
@@ -441,6 +465,55 @@ mod logging {
         fn flush(&self) {}
     }
 }
+
+#[no_mangle]
+pub extern "C" fn ttfp_variation_axes_count(font: *const ttfp_font) -> u16 {
+    font_from_ptr(font).variation_axes().count() as u16
+}
+
+#[no_mangle]
+pub extern "C" fn ttfp_get_variation_axis(
+    font: *const ttfp_font,
+    index: u16,
+    raw_axis: *mut ttf_parser::VariationAxis,
+) -> bool {
+    match font_from_ptr(font).variation_axes().nth(index as usize) {
+        Some(axis) => {
+            unsafe { *raw_axis = axis };
+            true
+        }
+        None => false,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ttfp_get_variation_axis_by_tag(
+    font: *const ttfp_font,
+    tag: ttf_parser::Tag,
+    raw_axis: *mut ttf_parser::VariationAxis,
+) -> bool {
+    match font_from_ptr(font).variation_axes().find(|axis| axis.tag == tag) {
+        Some(axis) => {
+            unsafe { *raw_axis = axis };
+            true
+        }
+        None => false,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn ttfp_map_variation_coordinates(
+    font: *const ttfp_font,
+    coordinates: *mut i32,
+    coordinates_size: u32,
+) -> bool {
+    let coordinates = unsafe { std::slice::from_raw_parts_mut(coordinates, coordinates_size as usize) };
+    match font_from_ptr(font).map_variation_coordinates(coordinates) {
+        Some(_) => true,
+        None => false,
+    }
+}
+
 
 #[cfg(feature = "logging")]
 #[no_mangle]

@@ -3,7 +3,7 @@
 #include <QCoreApplication>
 #include <QPainterPath>
 
-#include <ttfp.h>
+#include <ttfparser.h>
 
 #include "glyph.h"
 

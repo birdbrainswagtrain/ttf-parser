@@ -9,6 +9,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #define TTFP_MAJOR_VERSION 0
 #define TTFP_MINOR_VERSION 4
@@ -23,6 +24,11 @@ extern "C" {
  * @brief An opaque pointer to the font structure.
  */
 typedef struct ttfp_font ttfp_font;
+
+/**
+ * @brief A tag type.
+ */
+typedef uint32_t ttfp_tag;
 
 /**
  * @brief A glyph's tight bounding box.
@@ -64,6 +70,18 @@ typedef struct ttfp_name_record {
     uint16_t name_id;
     uint16_t name_size;
 } ttfp_name_record;
+
+/**
+ * @brief A variation axis.
+ */
+typedef struct ttfp_variation_axis {
+    ttfp_tag tag;
+    float min_value;
+    float def_value;
+    float max_value;
+    uint16_t name_id;
+    bool hidden;
+} ttfp_variation_axis;
 
 /**
  * @brief An outline building interface.
@@ -421,6 +439,28 @@ bool ttfp_outline_glyph(const ttfp_font *font,
                         uint16_t glyph_id,
                         ttfp_bbox *bbox);
 
+/** Outlines a variable glyph and returns its tight bounding box.
+ *
+ * Note: coordinates should be converted from fixed point 2.14 to i32
+ * by multiplying each coordinate by 16384.
+ *
+ * Number of `coordinates` should be the same as number of variation axes in the font.
+ *
+ * \b Warning: since \b ttf-parser is a pull parser,
+ * #ttfp_outline_builder will emit segments even when outline is partially malformed.
+ * You must check #ttfp_outline_variable_glyph result for error before using
+ * #ttfp_outline_builder's output.
+ *
+ * This method supports \b glyf + \b gvar and \b CFF2 tables.
+ */
+bool ttfp_outline_variable_glyph(ttfp_font *font,
+                                 ttfp_outline_builder builder,
+                                 void* user_data,
+                                 uint16_t glyph_id,
+                                 const int32_t *coordinates,
+                                 uint32_t coordinates_size,
+                                 ttfp_bbox *bbox);
+
 /**
  * @brief Returns a tight glyph bounding box.
  *
@@ -434,6 +474,37 @@ bool ttfp_outline_glyph(const ttfp_font *font,
 bool ttfp_get_glyph_bbox(const ttfp_font *font,
                          uint16_t glyph_id,
                          ttfp_bbox *bbox);
+
+/**
+ * @brief Returns a number of variation axes.
+ */
+uint16_t ttfp_variation_axes_count(const ttfp_font *font);
+
+/**
+ * @brief Returns a variation axis by index.
+ */
+bool ttfp_get_variation_axis(const ttfp_font *font,
+                             uint16_t index,
+                             ttfp_variation_axis *axis);
+
+/**
+ * @brief Returns a variation axis by tag.
+ */
+bool ttfp_get_variation_axis_by_tag(const ttfp_font *font,
+                                    ttfp_tag tag,
+                                    ttfp_variation_axis *axis);
+
+/**
+ * @brief Performs normalization mapping to variation coordinates.
+ *
+ * Note: coordinates should be converted from fixed point 2.14 to int
+ * by multiplying each coordinate by 16384.
+ *
+ * Number of \b coordinates should be the same as number of variation axes in the font.
+ */
+bool ttfp_map_variation_coordinates(const ttfp_font *font,
+                                    int32_t *coordinates,
+                                    uint32_t coordinates_size);
 
 #ifdef __cplusplus
 }
