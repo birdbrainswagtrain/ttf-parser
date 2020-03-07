@@ -510,6 +510,16 @@ pub trait OutlineBuilder {
 }
 
 
+struct DummyOutline;
+impl OutlineBuilder for DummyOutline {
+    fn move_to(&mut self, _: f32, _: f32) {}
+    fn line_to(&mut self, _: f32, _: f32) {}
+    fn quad_to(&mut self, _: f32, _: f32, _: f32, _: f32) {}
+    fn curve_to(&mut self, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) {}
+    fn close(&mut self) {}
+}
+
+
 /// A table name.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -898,21 +908,33 @@ impl<'a> Font<'a> {
     /// then prefer `outline_glyph()` method.
     #[inline]
     pub fn glyph_bounding_box(&self, glyph_id: GlyphId) -> Option<Rect> {
-        struct DummyOutline;
-        impl OutlineBuilder for DummyOutline {
-            fn move_to(&mut self, _: f32, _: f32) {}
-            fn line_to(&mut self, _: f32, _: f32) {}
-            fn quad_to(&mut self, _: f32, _: f32, _: f32, _: f32) {}
-            fn curve_to(&mut self, _: f32, _: f32, _: f32, _: f32, _: f32, _: f32) {}
-            fn close(&mut self) {}
-        }
-
         if self.glyf.is_some() {
             return self.glyf_glyph_bbox(glyph_id);
         }
 
         if let Some(ref metadata) = self.cff_ {
             return self.cff_glyph_outline(metadata, glyph_id, &mut DummyOutline);
+        }
+
+        if let Some(ref metadata) = self.cff2 {
+            return self.cff2_glyph_outline(metadata, glyph_id, &mut DummyOutline);
+        }
+
+        None
+    }
+
+    /// Returns a tight bounding box for a variable glyph.
+    ///
+    /// This is just a `outline_variable_glyph()` shorthand, since we have to outline
+    /// the glyph in case of a variable font to get its bounding box.
+    #[inline]
+    pub fn variable_glyph_bounding_box(
+        &self,
+        glyph_id: GlyphId,
+        coordinates: &[i32],
+    ) -> Option<Rect> {
+        if self.gvar.is_some() {
+            return self.glyf_glyph_outline_var(glyph_id, coordinates, &mut DummyOutline);
         }
 
         if let Some(ref metadata) = self.cff2 {

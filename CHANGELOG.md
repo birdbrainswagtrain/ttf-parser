@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Added
 - C API.
 - `Font::outline_variable_glyph` with `glyf`+`gvar` and `CFF2` support.
+- `Font::variable_glyph_bounding_box`.
 - `Font::variation_axes`
 - `Font::map_variation_coordinates`
 - `Font::metrics_variation`
