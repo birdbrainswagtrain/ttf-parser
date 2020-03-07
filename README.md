@@ -7,17 +7,29 @@
 
 A high-level, safe, zero-allocation TrueType font parser.
 
+Can be used as Rust and as C library.
+
 ### Features
 
 - A high-level API, for people who doesn't know how TrueType works internally.
   Basically, no direct access to font tables.
+- A [C API](./c-api).
 - Zero heap allocations.
 - Zero unsafe.
 - Zero required dependencies. Logging is enabled by default.
 - `no_std` compatible.
-- Fast.
+- Fast. Set the *Performance* section.
 - Stateless. No mutable methods.
 - Simple and maintainable code (no magic numbers).
+
+### Safety
+
+- The library must not panic. Any panic considered as a critical bug and should be reported.
+- The library forbids the unsafe code.
+- No heap allocations, so crash due to OOM is not possible.
+- All recursive methods have a depth limit.
+- Technically, should use less than 64KiB of stack in worst case scenario.
+- Most of arithmetic operations are checked.
 
 ### Supported TrueType features
 
@@ -61,7 +73,8 @@ A high-level, safe, zero-allocation TrueType font parser.
 ### Supported OpenType features
 
 - (`CFF `) Glyph outlining using [outline_glyph()] method.
-- (`CFF2`) Glyph outlining using [outline_glyph()] method.
+- (`CFF2`) Variable glyph outlining using [outline_variable_glyph()] method.
+- (`gvar`) Variable glyph outlining using [outline_variable_glyph()] method.
 - (`OS/2`) Retrieving font's kind using [is_regular()], [is_italic()],
   [is_bold()] and [is_oblique()] methods.
 - (`OS/2`) Retrieving font's weight using [weight()] method.
@@ -74,7 +87,7 @@ A high-level, safe, zero-allocation TrueType font parser.
 - (`GDEF`) Retrieving glyph's mark attachment class using [glyph_mark_attachment_class()] method.
 - (`GDEF`) Checking that glyph is a mark using [is_mark_glyph()] method.
 - (`avar`) Variation coordinates normalization using [map_variation_coordinates()] method.
-- (`fvar`) Variation axis parsing using [variation_axis()] method.
+- (`fvar`) Variation axis parsing using [variation_axes()] method.
 - (`VORG`) Retrieving glyph's vertical origin using [glyph_y_origin()] method.
 - (`MVAR`) Retrieving font's metrics variation using [metrics_variation()] method.
 - (`HVAR`) Retrieving glyph's variation offset for horizontal advance using [glyph_hor_advance_variation()] method.
@@ -95,8 +108,9 @@ A high-level, safe, zero-allocation TrueType font parser.
 [glyph_class()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_class
 [glyph_mark_attachment_class()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_mark_attachment_class
 [is_mark_glyph()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.is_mark_glyph
+[outline_variable_glyph()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.outline_variable_glyph
 [map_variation_coordinates()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.map_variation_coordinates
-[variation_axis()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.variation_axis
+[variation_axes()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.variation_axis
 [glyph_y_origin()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_y_origin
 [metrics_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.metrics_variation
 [glyph_hor_advance_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_hor_advance_variation
@@ -123,13 +137,17 @@ and [Compact Font Format](http://wwwimages.adobe.com/content/dam/Adobe/en/devnet
 The first one is fairly simple which makes it faster to process.
 The second one is basically a tiny language with a stack-based VM, which makes it way harder to process.
 
-The benchmark tests how long it takes to outline all glyphs in the font.
+The [benchmark](./benches/outline/) tests how long it takes to outline all glyphs in the font.
 
 ```
-test outline_cff  ... bench:   1,293,929 ns/iter (+/- 7,798)
-test outline_cff2 ... bench:   1,847,932 ns/iter (+/- 13,006)
-test outline_glyf ... bench:     764,206 ns/iter (+/- 5,716)
+ttf_parser_outline_glyf     851740 ns
+freetype_outline_glyf      1240367 ns
+
+ttf_parser_outline_cff     1371774 ns
+freetype_outline_cff       5892730 ns
 ```
+
+**Note:** FreeType is surprisingly slow, so I'm worried that I've messed something up.
 
 And here are some methods benchmarks:
 
@@ -163,11 +181,6 @@ is stored as UTF-16 BE.
 
 `glyph_name_8` is faster that `glyph_name_276`, because for glyph indexes lower than 258
 we are using predefined names, so no parsing is involved.
-
-### Safety
-
-- The library must not panic. Any panic considered as a critical bug and should be reported.
-- The library forbids the unsafe code.
 
 ### Alternatives
 
