@@ -140,11 +140,14 @@ The second one is basically a tiny language with a stack-based VM, which makes i
 The [benchmark](./benches/outline/) tests how long it takes to outline all glyphs in the font.
 
 ```
-ttf_parser_outline_glyf     851740 ns
-freetype_outline_glyf      1240367 ns
+ttf_parser_outline_glyf     853957 ns
+freetype_outline_glyf      1250442 ns
 
-ttf_parser_outline_cff     1371774 ns
-freetype_outline_cff       5892730 ns
+ttf_parser_outline_gvar     984885 ns
+freetype_outline_gvar      1443903 ns
+
+ttf_parser_outline_cff     1371693 ns
+freetype_outline_cff       5856448 ns
 ```
 
 **Note:** FreeType is surprisingly slow, so I'm worried that I've messed something up.

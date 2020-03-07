@@ -204,6 +204,17 @@ static void freetype_outline_glyf(benchmark::State &state)
 }
 BENCHMARK(freetype_outline_glyf);
 
+static void freetype_outline_gvar(benchmark::State &state)
+{
+    FT::Font font("../fonts/SourceSansVariable-Roman.ttf", 0);
+    for (auto _ : state) {
+        for (uint i = 0; i < font.numberOfGlyphs(); i++) {
+            font.outline(i);
+        }
+    }
+}
+BENCHMARK(freetype_outline_gvar);
+
 static void freetype_outline_cff(benchmark::State &state)
 {
     FT::Font font("../fonts/SourceSansPro-Regular.otf", 0);
@@ -226,6 +237,18 @@ static void ttf_parser_outline_glyf(benchmark::State &state)
     }
 }
 BENCHMARK(ttf_parser_outline_glyf);
+
+static void ttf_parser_outline_gvar(benchmark::State &state)
+{
+    TTFP::Font font("../fonts/SourceSansVariable-Roman.ttf", 0);
+    const auto numberOfGlyphs = font.numberOfGlyphs();
+    for (auto _ : state) {
+        for (uint i = 0; i < numberOfGlyphs; i++) {
+            font.outline(i);
+        }
+    }
+}
+BENCHMARK(ttf_parser_outline_gvar);
 
 static void ttf_parser_outline_cff(benchmark::State &state)
 {
