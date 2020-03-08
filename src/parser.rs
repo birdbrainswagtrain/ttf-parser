@@ -108,6 +108,7 @@ impl FromData for Fixed {
 
     #[inline]
     fn parse(data: &[u8]) -> Self {
+        // TODO: cast should be checked?
         Fixed(i32::parse(data) as f32 / 65536.0)
     }
 }
@@ -526,7 +527,7 @@ pub struct Offset16(pub u16);
 
 impl Offset for Offset16 {
     fn to_usize(&self) -> usize {
-        self.0 as usize
+        usize::from(self.0)
     }
 }
 

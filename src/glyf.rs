@@ -541,10 +541,10 @@ impl<'a> Iterator for GlyphPoints<'a> {
 
         let x = match (self.last_flags.x_short(), self.last_flags.x_is_same_or_positive_short()) {
             (true, true) => {
-                self.x_coords.read::<u8>()? as i16
+                i16::from(self.x_coords.read::<u8>()?)
             }
             (true, false) => {
-                -(self.x_coords.read::<u8>()? as i16)
+                -i16::from(self.x_coords.read::<u8>()?)
             }
             (false, true) => {
                 // Keep previous coordinate.
@@ -558,10 +558,10 @@ impl<'a> Iterator for GlyphPoints<'a> {
 
         let y = match (self.last_flags.y_short(), self.last_flags.y_is_same_or_positive_short()) {
             (true, true) => {
-                self.y_coords.read::<u8>()? as i16
+                i16::from(self.y_coords.read::<u8>()?)
             }
             (true, false) => {
-                -(self.y_coords.read::<u8>()? as i16)
+                -i16::from(self.y_coords.read::<u8>()?)
             }
             (false, true) => {
                 // Keep previous coordinate.

@@ -3,6 +3,7 @@
 // http://wwwimages.adobe.com/content/dam/Adobe/en/devnet/font/pdfs/5177.Type2.pdf
 // https://github.com/opentypejs/opentype.js/blob/master/src/tables/cff.js
 
+use core::convert::TryFrom;
 use core::ops::Range;
 
 use crate::parser::{Stream, U24, FromData};
@@ -154,7 +155,7 @@ pub(crate) fn parse_metadata(data: &[u8]) -> Option<Metadata> {
 
     // Jump to Name INDEX. It's not necessarily right after the header.
     if header_size > s.offset() as u8 {
-        s.advance(header_size as u32 - s.offset() as u32);
+        s.advance(u32::from(header_size) - s.offset() as u32);
     }
 
     // Skip Name INDEX.
@@ -240,7 +241,7 @@ fn parse_top_dict(s: &mut Stream) -> Option<(usize, Option<Range<usize>>)> {
                 let operands = dict_parser.operands();
 
                 if operands.len() == 1 {
-                    char_strings_offset = operands[0] as usize;
+                    char_strings_offset = usize::try_from(operands[0]).ok()?;
                 }
             }
             top_dict_operator::PRIVATE_DICT_SIZE_AND_OFFSET => {
@@ -248,9 +249,10 @@ fn parse_top_dict(s: &mut Stream) -> Option<(usize, Option<Range<usize>>)> {
                 let operands = dict_parser.operands();
 
                 if operands.len() == 2 {
-                    let len = operands[0] as usize;
-                    let start = operands[1] as usize;
-                    private_dict_range = Some(start..start+len);
+                    let len = usize::try_from(operands[0]).ok()?;
+                    let start = usize::try_from(operands[1]).ok()?;
+                    let end = start.checked_add(len)?;
+                    private_dict_range = Some(start..end);
                 }
             }
             _ => {}
@@ -273,7 +275,7 @@ fn parse_private_dict(data: &[u8]) -> Option<usize> {
             let operands = dict_parser.operands();
 
             if operands.len() == 1 {
-                subroutines_offset = Some(operands[0] as usize);
+                subroutines_offset = usize::try_from(operands[0]).ok();
             }
 
             break;
@@ -542,9 +544,10 @@ fn _parse_char_string(
                     return Err(CFFError::NestingLimitReached);
                 }
 
-                let subroutine_bias = calc_subroutine_bias(ctx.metadata.local_subrs.len() as u16);
-                let index = stack.pop() as i32 + subroutine_bias as i32;
-                let char_string = ctx.metadata.local_subrs.get(index as u16)
+                let subroutine_bias = calc_subroutine_bias(ctx.metadata.local_subrs.len());
+                let index = stack.pop() as i32 + i32::from(subroutine_bias);
+                let index = u16::try_from(index).map_err(|_| CFFError::InvalidSubroutineIndex)?;
+                let char_string = ctx.metadata.local_subrs.get(index)
                     .ok_or(CFFError::InvalidSubroutineIndex)?;
                 let pos = _parse_char_string(ctx, char_string, x, y, stack, depth + 1, builder)?;
                 x = pos.0;
@@ -919,9 +922,10 @@ fn _parse_char_string(
                     return Err(CFFError::NestingLimitReached);
                 }
 
-                let subroutine_bias = calc_subroutine_bias(ctx.metadata.global_subrs.len() as u16);
-                let index = stack.pop() as i32 + subroutine_bias as i32;
-                let char_string = ctx.metadata.global_subrs.get(index as u16)
+                let subroutine_bias = calc_subroutine_bias(ctx.metadata.global_subrs.len());
+                let index = stack.pop() as i32 + i32::from(subroutine_bias);
+                let index = u16::try_from(index).map_err(|_| CFFError::InvalidSubroutineIndex)?;
+                let char_string = ctx.metadata.global_subrs.get(index)
                     .ok_or(CFFError::InvalidSubroutineIndex)?;
                 let pos = _parse_char_string(ctx, char_string, x, y, stack, depth + 1, builder)?;
                 x = pos.0;
@@ -1066,7 +1070,7 @@ pub fn calc_subroutine_bias(len: u16) -> u16 {
 fn parse_index<'a>(s: &mut Stream<'a>) -> Option<DataIndex<'a>> {
     let count: u16 = s.read()?;
     if count != 0 && count != core::u16::MAX {
-        parse_index_impl(count as u32, s)
+        parse_index_impl(u32::from(count), s)
     } else {
         Some(DataIndex::default())
     }
@@ -1097,7 +1101,7 @@ fn skip_index(s: &mut Stream) -> Option<()> {
     let count: u16 = s.read()?;
     if count != 0 && count != core::u16::MAX {
         let offset_size: OffsetSize = try_parse_offset_size(s)?;
-        let offsets_len = (count + 1) as u32 * offset_size as u32;
+        let offsets_len = u32::from(count + 1) * offset_size as u32;
         let offsets = VarOffsets {
             data: &s.read_bytes(offsets_len)?,
             offset_size,
@@ -1124,12 +1128,12 @@ impl<'a> VarOffsets<'a> {
             return None;
         }
 
-        let start = index as usize * self.offset_size as usize;
+        let start = usize::from(index) * self.offset_size as usize;
         let end = start + self.offset_size as usize;
         let data = self.data.get(start..end)?;
         let n: u32 = match self.offset_size {
-            OffsetSize::Size1 => u8::parse(data) as u32,
-            OffsetSize::Size2 => u16::parse(data) as u32,
+            OffsetSize::Size1 => u32::from(u8::parse(data)),
+            OffsetSize::Size2 => u32::from(u16::parse(data)),
             OffsetSize::Size3 => U24::parse(data).0,
             OffsetSize::Size4 => u32::parse(data),
         };
@@ -1155,6 +1159,7 @@ impl<'a> VarOffsets<'a> {
 
     #[inline]
     pub fn len(&self) -> u16 {
+        // TODO: check that len actually u16
         self.data.len() as u16 / self.offset_size as u16
     }
 
@@ -1211,8 +1216,8 @@ impl<'a> DataIndex<'a> {
         if index == core::u16::MAX {
             None
         } else if index + 1 < self.offsets.len() {
-            let start = self.offsets.get(index)? as usize;
-            let end = self.offsets.get(index + 1)? as usize;
+            let start = usize::try_from(self.offsets.get(index)?).ok()?;
+            let end = usize::try_from(self.offsets.get(index + 1)?).ok()?;
             let data = self.data.get(start..end)?;
             Some(data)
         } else {
@@ -1303,13 +1308,13 @@ impl<'a> DictionaryParser<'a> {
             let b: u8 = s.read()?;
             // 0..=21 bytes are operators.
             if is_dict_one_byte_op(b) {
-                let mut operator = b as u16;
+                let mut operator = u16::from(b);
 
                 // Check that operator is two byte long.
                 if b == TWO_BYTE_OPERATOR_MARK {
                     // Use a 1200 'prefix' to make two byte operators more readable.
                     // 12 3 => 1203
-                    operator = 1200 + s.read::<u8>()? as u16;
+                    operator = 1200 + u16::from(s.read::<u8>()?);
                 }
 
                 self.offset = s.offset();
@@ -1342,7 +1347,7 @@ impl<'a> DictionaryParser<'a> {
                 break;
             } else {
                 let op = parse_number(b, &mut s)?;
-                self.operands[self.operands_len as usize] = op;
+                self.operands[usize::from(self.operands_len)] = op;
                 self.operands_len += 1;
 
                 if self.operands_len >= MAX_OPERANDS_LEN as u8 {
@@ -1356,7 +1361,7 @@ impl<'a> DictionaryParser<'a> {
 
     #[inline]
     fn operands(&self) -> &[i32] {
-        &self.operands[..self.operands_len as usize]
+        &self.operands[..usize::from(self.operands_len)]
     }
 }
 
@@ -1376,11 +1381,12 @@ pub fn is_dict_one_byte_op(b: u8) -> bool {
 pub fn parse_number(b0: u8, s: &mut Stream) -> Option<i32> {
     match b0 {
         28 => {
-            let n = s.read::<u16>()? as i32;
+            let n = i32::from(s.read::<u16>()?);
             Some(n)
         }
         29 => {
-            let n = s.read::<u32>()? as i32;
+            // TODO: how exactly it should be handled?
+            let n = s.read::<u32>().and_then(|n| i32::try_from(n).ok())?;
             Some(n)
         }
         30 => {
@@ -1397,17 +1403,17 @@ pub fn parse_number(b0: u8, s: &mut Stream) -> Option<i32> {
             Some(0)
         }
         32..=246 => {
-            let n = b0 as i32 - 139;
+            let n = i32::from(b0) - 139;
             Some(n)
         }
         247..=250 => {
-            let b1 = s.read::<u8>()? as i32;
-            let n = (b0 as i32 - 247) * 256 + b1 + 108;
+            let b1 = i32::from(s.read::<u8>()?);
+            let n = (i32::from(b0) - 247) * 256 + b1 + 108;
             Some(n)
         }
         251..=254 => {
-            let b1 = s.read::<u8>()? as i32;
-            let n = -(b0 as i32 - 251) * 256 - b1 - 108;
+            let b1 = i32::from(s.read::<u8>()?);
+            let n = -(i32::from(b0) - 251) * 256 - b1 - 108;
             Some(n)
         }
         _ => None,
@@ -2425,6 +2431,52 @@ mod tests {
 
         assert_eq!(parse_top_dict(&mut Stream::new(&data)).unwrap(),
                    (5, Some(2147483647..4294967294)));
+    }
+
+    #[test]
+    fn private_dict_negative_char_strings_offset() {
+        let data = writer::convert(&[
+            UInt16(1), // count
+            UInt8(1), // offset size
+            UInt8(1), // index[0]
+            UInt8(14), // index[1]
+            // Item 0
+            CFFInt(-1),
+            UInt8(top_dict_operator::CHAR_STRINGS_OFFSET as u8),
+        ]);
+
+        assert!(parse_top_dict(&mut Stream::new(&data)).is_none());
+    }
+
+    #[test]
+    fn private_dict_no_char_strings_offset_operand() {
+        let data = writer::convert(&[
+            UInt16(1), // count
+            UInt8(1), // offset size
+            UInt8(1), // index[0]
+            UInt8(14), // index[1]
+            // Item 0
+            // <-- No number here.
+            UInt8(top_dict_operator::CHAR_STRINGS_OFFSET as u8),
+        ]);
+
+        assert!(parse_top_dict(&mut Stream::new(&data)).is_none());
+    }
+
+    #[test]
+    fn negative_private_dict_offset_and_size() {
+        let data = writer::convert(&[
+            UInt16(1), // count
+            UInt8(1), // offset size
+            UInt8(1), // index[0]
+            UInt8(14), // index[1]
+            // Item 0
+            CFFInt(-1),
+            CFFInt(-1),
+            UInt8(top_dict_operator::PRIVATE_DICT_SIZE_AND_OFFSET as u8),
+        ]);
+
+        assert!(parse_top_dict(&mut Stream::new(&data)).is_none());
     }
 
     // TODO: return from main
