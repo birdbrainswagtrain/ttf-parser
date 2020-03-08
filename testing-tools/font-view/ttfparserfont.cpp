@@ -169,7 +169,7 @@ void TtfParserFont::setVariations(const QVector<Variation> &variations)
         throw tr("Font is not loaded.");
     }
 
-    QVector<int> coords;
+    QVector<qint16> coords;
     coords.fill(0, variations.size());
 
     int i = 0;

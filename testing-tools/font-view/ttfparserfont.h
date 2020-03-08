@@ -27,6 +27,6 @@ public:
 private:
     QByteArray m_fontData;
     ttfp_font *m_font = nullptr;
-    QVector<int> m_variationCoords;
+    QVector<qint16> m_variationCoords;
 };
 
