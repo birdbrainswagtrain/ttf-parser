@@ -204,9 +204,9 @@ class TtfFixed(TtfType):
         return 4
 
     def print(self, offset: int) -> None:
-        print(f'i32::from_be_bytes(['
+        print(f'(i32::from_be_bytes(['
               f'    self.data[{offset}], self.data[{offset + 1}], self.data[{offset + 2}], self.data[{offset + 3}]'
-              f']) as f32 / 65536.0')
+              f']) / 65536) as f32')
 
 
 # unsupported
@@ -452,9 +452,9 @@ GDEF_RANGE_RECORD = [
 # https://docs.microsoft.com/en-us/typography/opentype/spec/fvar#variationaxisrecord
 FVAR_VARIATION_AXIS_RECORD = [
     TableRow(True,  TtfTag(),       'axisTag'),
-    TableRow(True,  TtfInt32(),     'minValue'),      # This three values actually have type Fixed,
-    TableRow(True,  TtfInt32(),     'defaultValue'),  # but we need to compare them later,
-    TableRow(True,  TtfInt32(),     'maxValue'),      # and Rust doesn't implement Ord for f32.
+    TableRow(True,  TtfFixed(),     'minValue'),
+    TableRow(True,  TtfFixed(),     'defValue'),
+    TableRow(True,  TtfFixed(),     'maxValue'),
     TableRow(True,  TtfUInt16(),    'flags'),
     TableRow(True,  TtfUInt16(),    'axisNameID'),
 ]

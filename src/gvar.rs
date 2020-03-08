@@ -79,7 +79,7 @@ impl<'a> Font<'a> {
     pub(crate) fn glyf_glyph_outline_var(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i32],
+        coordinates: &[i16],
         builder: &mut dyn OutlineBuilder,
     ) -> Option<Rect> {
         let mut b = glyf::Builder::new(Transform::default(), Some(BBox::new()), builder);
@@ -92,7 +92,7 @@ impl<'a> Font<'a> {
         &self,
         glyph_id: GlyphId,
         data: &[u8],
-        coordinates: &[i32],
+        coordinates: &[i16],
         depth: u8,
         builder: &mut glyf::Builder,
     ) -> Option<()> {
@@ -174,12 +174,12 @@ impl<'a> Font<'a> {
     fn gvar_parse_variation_data(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i32],
+        coordinates: &[i16],
         points_len: u16,
     ) -> Option<VariationTuples> {
         let table = self.gvar?;
 
-        if coordinates.len() != table.axis_count.get() as usize {
+        if coordinates.len() != usize::from(table.axis_count.get()) {
             return None;
         }
 
@@ -208,7 +208,7 @@ impl<'a> Font<'a> {
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuple-variation-store-header
 fn parse_variation_data<'a>(
-    coordinates: &[i32],
+    coordinates: &[i16],
     shared_tuple_records: &LazyArray16<F2DOT14>,
     points_len: u16,
     data: &'a [u8],
@@ -298,7 +298,7 @@ struct VariationTuples<'a> {
 
 impl<'a> VariationTuples<'a> {
     fn as_mut_slice(&mut self) -> &mut [VariationTuple<'a>] {
-        &mut self.headers[0..self.len as usize]
+        &mut self.headers[0..usize::from(self.len)]
     }
 
     fn apply(
@@ -307,8 +307,8 @@ impl<'a> VariationTuples<'a> {
         points: glyf::GlyphPoints,
         point: glyf::GlyphPoint,
     ) -> Option<(f32, f32)> {
-        let mut x = point.x as f32;
-        let mut y = point.y as f32;
+        let mut x = f32::from(point.x);
+        let mut y = f32::from(point.y);
 
         for tuple in self.as_mut_slice() {
             if let Some(ref mut set_points) = tuple.set_points {
@@ -394,7 +394,7 @@ struct TupleVariationHeaderData {
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuplevariationheader
 fn parse_variation_tuples<'a>(
     count: u16,
-    coordinates: &[i32],
+    coordinates: &[i16],
     shared_tuple_records: &LazyArray16<F2DOT14>,
     shared_point_numbers: Option<PackedPointsIter<'a>>,
     points_len: u16,
@@ -441,7 +441,7 @@ fn parse_variation_tuples<'a>(
 
         let deltas = {
             // Use `checked_sub` in case we went over the `serialized_data_len`.
-            let left = (header.serialized_data_len as usize)
+            let left = usize::from(header.serialized_data_len)
                 .checked_sub(serialized_s.offset() - serialized_data_start)?;
             let deltas_data = serialized_s.read_bytes(left as u32)?;
             PackedDeltasIter::new(header.scalar, deltas_count, deltas_data)
@@ -453,7 +453,7 @@ fn parse_variation_tuples<'a>(
             prev_point: None,
         };
 
-        tuples.headers[tuples.len as usize] = tuple;
+        tuples.headers[usize::from(tuples.len)] = tuple;
         tuples.len += 1;
     }
 
@@ -462,7 +462,7 @@ fn parse_variation_tuples<'a>(
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuplevariationheader
 fn parse_tuple_variation_header(
-    coordinates: &[i32],
+    coordinates: &[i16],
     shared_tuple_records: &LazyArray16<F2DOT14>,
     s: &mut Stream,
 ) -> Option<TupleVariationHeaderData> {
@@ -506,7 +506,7 @@ fn parse_tuple_variation_header(
     // https://docs.microsoft.com/en-us/typography/opentype/spec/otvaroverview#algorithm-for-interpolation-of-instance-values
     let mut scalar = 1.0;
     for i in 0..coordinates.len() {
-        let v = coordinates[i] as i16;
+        let v = coordinates[i];
         let peak = peak_tuple.at(i as u16).0;
         if peak == 0 || v == peak {
             continue;
@@ -596,10 +596,10 @@ mod packed_points {
             // The total amount of points can be set as one or two bytes
             // depending on the first bit.
             let b1: u8 = s.read()?;
-            let mut count = b1 as u16;
+            let mut count = u16::from(b1);
             if b1 & Control::POINTS_ARE_WORDS != 0 {
                 let b2: u8 = s.read()?;
-                count = (((b1 & Control::POINT_RUN_COUNT_MASK) as u16) << 8) | b2 as u16;
+                count = (u16::from(b1 & Control::POINT_RUN_COUNT_MASK) << 8) | u16::from(b2);
             }
 
             if count == 0 {
@@ -616,7 +616,7 @@ mod packed_points {
             let mut i = 0;
             while i < count {
                 let control: Control = s.read()?;
-                let run_count = control.run_count() as u16;
+                let run_count = u16::from(control.run_count());
                 let is_points_are_words = control.is_points_are_words();
                 // Do not actually parse the number, simply advance.
                 s.advance_checked(if is_points_are_words { 2u16 } else { 1u16 } * run_count)?;
@@ -636,7 +636,7 @@ mod packed_points {
             // Check that points data size is smaller than the storage type
             // used by the iterator.
             let data_len = s.offset() - start;
-            if data_len > core::u16::MAX as usize {
+            if data_len > usize::from(core::u16::MAX) {
                 return None;
             }
 

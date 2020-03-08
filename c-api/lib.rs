@@ -402,7 +402,7 @@ pub extern "C" fn ttfp_outline_variable_glyph(
     raw_builder: ttfp_outline_builder,
     user_data: *mut c_void,
     glyph_id: GlyphId,
-    coordinates: *const i32,
+    coordinates: *const i16,
     coordinates_size: u32,
     raw_bbox: *mut ttf_parser::Rect,
 ) -> bool {
@@ -504,7 +504,7 @@ pub extern "C" fn ttfp_get_variation_axis_by_tag(
 #[no_mangle]
 pub extern "C" fn ttfp_map_variation_coordinates(
     font: *const ttfp_font,
-    coordinates: *mut i32,
+    coordinates: *mut i16,
     coordinates_size: u32,
 ) -> bool {
     let coordinates = unsafe { std::slice::from_raw_parts_mut(coordinates, coordinates_size as usize) };

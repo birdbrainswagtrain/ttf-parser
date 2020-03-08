@@ -2,6 +2,7 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/cff2charstr
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#item-variation-store
 
+use core::convert::TryFrom;
 use core::ops::Range;
 
 use crate::{Font, GlyphId, OutlineBuilder, Rect, BBox};
@@ -199,21 +200,21 @@ fn parse_top_dict(data: &[u8]) -> Option<TopDictData> {
             let operands = dict_parser.operands();
 
             if operands.len() == 1 {
-                dict_data.char_strings_offset = operands[0] as usize;
+                dict_data.char_strings_offset = usize::try_from(operands[0]).ok()?;
             }
         } else if operator.get() == top_dict_operator::FONT_DICT_INDEX_OFFSET {
             dict_parser.parse_operands()?;
             let operands = dict_parser.operands();
 
             if operands.len() == 1 {
-                dict_data.font_dict_index_offset = Some(operands[0] as usize);
+                dict_data.font_dict_index_offset = usize::try_from(operands[0]).ok();
             }
         } else if operator.get() == top_dict_operator::VARIATION_STORE_OFFSET {
             dict_parser.parse_operands()?;
             let operands = dict_parser.operands();
 
             if operands.len() == 1 {
-                dict_data.variation_store_offset = Some(operands[0] as usize);
+                dict_data.variation_store_offset = usize::try_from(operands[0]).ok();
             }
         }
     }
@@ -236,9 +237,10 @@ fn parse_font_dict(data: &[u8]) -> Option<Range<usize>> {
             let operands = dict_parser.operands();
 
             if operands.len() == 2 {
-                let len = operands[0] as usize;
-                let start = operands[1] as usize;
-                private_dict_range = Some(start..start+len);
+                let len = usize::try_from(operands[0]).ok()?;
+                let start = usize::try_from(operands[1]).ok()?;
+                let end = start.checked_add(len)?;
+                private_dict_range = Some(start..end);
             }
 
             break;
@@ -257,7 +259,7 @@ fn parse_private_dict(data: &[u8]) -> Option<usize> {
             let operands = dict_parser.operands();
 
             if operands.len() == 1 {
-                subroutines_offset = Some(operands[0] as usize);
+                subroutines_offset = usize::try_from(operands[0]).ok();
             }
 
             break;
@@ -523,8 +525,9 @@ fn _parse_char_string(
                 }
 
                 let subroutine_bias = calc_subroutine_bias(ctx.metadata.local_subrs.len() as u16);
-                let index = stack.pop() as i32 + subroutine_bias as i32;
-                let char_string = ctx.metadata.local_subrs.get(index as u16)
+                let index = stack.pop() as i32 + i32::from(subroutine_bias);
+                let index = u16::try_from(index).map_err(|_| CFFError::InvalidSubroutineIndex)?;
+                let char_string = ctx.metadata.local_subrs.get(index)
                     .ok_or(CFFError::InvalidSubroutineIndex)?;
                 let pos = _parse_char_string(ctx, char_string, x, y, stack, depth + 1, builder)?;
                 x = pos.0;
@@ -895,9 +898,10 @@ fn _parse_char_string(
                     return Err(CFFError::NestingLimitReached);
                 }
 
-                let subroutine_bias = calc_subroutine_bias(ctx.metadata.global_subrs.len() as u16);
-                let index = stack.pop() as i32 + subroutine_bias as i32;
-                let char_string = ctx.metadata.global_subrs.get(index as u16)
+                let subroutine_bias = calc_subroutine_bias(ctx.metadata.global_subrs.len());
+                let index = stack.pop() as i32 + i32::from(subroutine_bias);
+                let index = u16::try_from(index).map_err(|_| CFFError::InvalidSubroutineIndex)?;
+                let char_string = ctx.metadata.global_subrs.get(index)
                     .ok_or(CFFError::InvalidSubroutineIndex)?;
                 let pos = _parse_char_string(ctx, char_string, x, y, stack, depth + 1, builder)?;
                 x = pos.0;
@@ -992,23 +996,23 @@ fn _parse_char_string(
                 debug_assert!(stack.is_empty());
             }
             32..=246 => {
-                let n = op as i32 - 139;
+                let n = i32::from(op) - 139;
                 stack.push(n as f32)?;
             }
             247..=250 => {
                 let b1 = s.read::<u8>().ok_or(CFFError::ReadOutOfBounds)? as i32;
-                let n = (op as i32 - 247) * 256 + b1 + 108;
+                let n = (i32::from(op) - 247) * 256 + b1 + 108;
                 debug_assert!((108..=1131).contains(&n));
                 stack.push(n as f32)?;
             }
             251..=254 => {
                 let b1 = s.read::<u8>().ok_or(CFFError::ReadOutOfBounds)? as i32;
-                let n = -(op as i32 - 251) * 256 - b1 - 108;
+                let n = -(i32::from(op) - 251) * 256 - b1 - 108;
                 debug_assert!((-1131..=-108).contains(&n));
                 stack.push(n as f32)?;
             }
             operator::FIXED_16_16 => {
-                let n = s.read::<u32>().ok_or(CFFError::ReadOutOfBounds)? as i32 as f32 / 65536.0;
+                let n = (s.read::<u32>().ok_or(CFFError::ReadOutOfBounds)? / 65536) as i32 as f32;
                 stack.push(n)?;
             }
         }
@@ -1023,7 +1027,7 @@ fn parse_index<'a>(s: &mut Stream<'a>) -> Option<DataIndex<'a>> {
     // Unlike in CFF, in CFF2 `count` us u32 and not u16.
     let count: u32 = s.read()?;
     if count != 0 && count != core::u32::MAX {
-        parse_index_impl(count as u32, s)
+        parse_index_impl(count, s)
     } else {
         Some(DataIndex::default())
     }
@@ -1061,13 +1065,13 @@ impl<'a> DictionaryParser<'a> {
         while !s.at_end() {
             let b: u8 = s.read()?;
             if is_dict_one_byte_op(b) {
-                let mut operator = b as u16;
+                let mut operator = u16::from(b);
 
                 // Check that operator is two byte long.
                 if b == TWO_BYTE_OPERATOR_MARK {
                     // Use a 1200 'prefix' to make two byte operators more readable.
                     // 12 3 => 1203
-                    operator = 1200 + s.read::<u8>()? as u16;
+                    operator = 1200 + u16::from(s.read::<u8>()?);
                 }
 
                 self.offset = s.offset();
@@ -1099,7 +1103,7 @@ impl<'a> DictionaryParser<'a> {
                 break;
             } else {
                 let op = parse_number(b, &mut s)?;
-                self.operands[self.operands_len as usize] = op;
+                self.operands[usize::from(self.operands_len)] = op;
                 self.operands_len += 1;
 
                 if self.operands_len >= MAX_OPERANDS_LEN as u16 {
@@ -1113,7 +1117,7 @@ impl<'a> DictionaryParser<'a> {
 
     #[inline]
     fn operands(&self) -> &[i32] {
-        &self.operands[..self.operands_len as usize]
+        &self.operands[..usize::from(self.operands_len)]
     }
 }
 

@@ -108,8 +108,7 @@ impl FromData for Fixed {
 
     #[inline]
     fn parse(data: &[u8]) -> Self {
-        // TODO: cast should be checked?
-        Fixed(i32::parse(data) as f32 / 65536.0)
+        Fixed((i32::parse(data) / 65536) as f32)
     }
 }
 

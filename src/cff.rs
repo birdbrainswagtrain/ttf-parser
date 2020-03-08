@@ -1044,7 +1044,7 @@ fn _parse_char_string(
                 stack.push(n as f32)?;
             }
             operator::FIXED_16_16 => {
-                let n = s.read::<u32>().ok_or(CFFError::ReadOutOfBounds)? as i32 as f32 / 65536.0;
+                let n = (s.read::<u32>().ok_or(CFFError::ReadOutOfBounds)? / 65536) as i32 as f32;
                 stack.push(n)?;
             }
         }

@@ -904,18 +904,21 @@ pub mod fvar {
         }
 
         #[inline(always)]
-        pub fn min_value(&self) -> i32 {
-            i32::from_be_bytes([self.data[4], self.data[5], self.data[6], self.data[7]])
+        pub fn min_value(&self) -> f32 {
+            (i32::from_be_bytes([self.data[4], self.data[5], self.data[6], self.data[7]]) / 65536)
+                as f32
         }
 
         #[inline(always)]
-        pub fn default_value(&self) -> i32 {
-            i32::from_be_bytes([self.data[8], self.data[9], self.data[10], self.data[11]])
+        pub fn def_value(&self) -> f32 {
+            (i32::from_be_bytes([self.data[8], self.data[9], self.data[10], self.data[11]]) / 65536)
+                as f32
         }
 
         #[inline(always)]
-        pub fn max_value(&self) -> i32 {
-            i32::from_be_bytes([self.data[12], self.data[13], self.data[14], self.data[15]])
+        pub fn max_value(&self) -> f32 {
+            (i32::from_be_bytes([self.data[12], self.data[13], self.data[14], self.data[15]])
+                / 65536) as f32
         }
 
         #[inline(always)]

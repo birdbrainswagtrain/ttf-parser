@@ -41,7 +41,7 @@ fn main() {
         println!("Variation axes:");
         for axis in font.variation_axes() {
             println!("  {} {}..{}, default {}",
-                     axis.tag, axis.min_value, axis.max_value, axis.default_value);
+                     axis.tag, axis.min_value, axis.max_value, axis.def_value);
         }
     }
 

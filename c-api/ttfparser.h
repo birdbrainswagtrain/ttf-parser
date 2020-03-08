@@ -441,7 +441,7 @@ bool ttfp_outline_glyph(const ttfp_font *font,
 
 /** Outlines a variable glyph and returns its tight bounding box.
  *
- * Note: coordinates should be converted from fixed point 2.14 to i32
+ * Note: coordinates should be converted from fixed point 2.14 to int16_t
  * by multiplying each coordinate by 16384.
  *
  * Number of `coordinates` should be the same as number of variation axes in the font.
@@ -457,7 +457,7 @@ bool ttfp_outline_variable_glyph(ttfp_font *font,
                                  ttfp_outline_builder builder,
                                  void* user_data,
                                  uint16_t glyph_id,
-                                 const int32_t *coordinates,
+                                 const int16_t *coordinates,
                                  uint32_t coordinates_size,
                                  ttfp_bbox *bbox);
 
@@ -497,13 +497,13 @@ bool ttfp_get_variation_axis_by_tag(const ttfp_font *font,
 /**
  * @brief Performs normalization mapping to variation coordinates.
  *
- * Note: coordinates should be converted from fixed point 2.14 to int
+ * Note: coordinates should be converted from fixed point 2.14 to int16_t
  * by multiplying each coordinate by 16384.
  *
  * Number of \b coordinates should be the same as number of variation axes in the font.
  */
 bool ttfp_map_variation_coordinates(const ttfp_font *font,
-                                    int32_t *coordinates,
+                                    int16_t *coordinates,
                                     uint32_t coordinates_size);
 
 #ifdef __cplusplus

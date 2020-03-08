@@ -870,7 +870,7 @@ impl<'a> Font<'a> {
 
     /// Outlines a variable glyph and returns its tight bounding box.
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i32
+    /// Note: coordinates should be converted from fixed point 2.14 to i16
     /// by multiplying each coordinate by 16384.
     ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
@@ -887,7 +887,7 @@ impl<'a> Font<'a> {
     pub fn outline_variable_glyph(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i32],
+        coordinates: &[i16],
         builder: &mut dyn OutlineBuilder,
     ) -> Option<Rect> {
         if self.is_variable() && self.gvar.is_some() {
@@ -932,7 +932,7 @@ impl<'a> Font<'a> {
     pub fn variable_glyph_bounding_box(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i32],
+        coordinates: &[i16],
     ) -> Option<Rect> {
         if self.gvar.is_some() {
             return self.glyf_glyph_outline_var(glyph_id, coordinates, &mut DummyOutline);

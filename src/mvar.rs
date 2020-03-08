@@ -9,13 +9,13 @@ impl<'a> Font<'a> {
     /// Parses metrics variation offset using
     /// [Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/mvar).
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i32
+    /// Note: coordinates should be converted from fixed point 2.14 to i16
     /// by multiplying each coordinate by 16384.
     ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
     ///
     /// Returns `None` when `MVAR` table is not present or invalid.
-    pub fn metrics_variation(&self, tag: Tag, coordinates: &[i32]) -> Option<f32> {
+    pub fn metrics_variation(&self, tag: Tag, coordinates: &[i16]) -> Option<f32> {
         let mut s = Stream::new(self.mvar?);
 
         let version: u32 = s.read()?;
@@ -46,7 +46,7 @@ impl<'a> Font<'a> {
 pub fn parse_item_variation_store(
     outer_index: u16,
     inner_index: u16,
-    coordinates: &[i32],
+    coordinates: &[i16],
     s: &mut Stream,
 ) -> Option<f32> {
     let orig = s.clone();
@@ -71,7 +71,7 @@ pub fn parse_item_variation_store(
 
 fn parse_item_variation_data(
     inner_index: u16,
-    coordinates: &[i32],
+    coordinates: &[i16],
     s: &mut Stream,
     region_s: Stream,
 ) -> Option<f32> {
@@ -82,20 +82,21 @@ fn parse_item_variation_data(
 
     let short_delta_count: u16 = s.read()?;
     let region_index_count: u16 = s.read()?;
-    let region_indexes = s.read_array::<u16, u16>(region_index_count as u16)?;
-    s.advance(inner_index as u32 * (short_delta_count as u32 + region_index_count as u32));
+    let region_indexes = s.read_array::<u16, u16>(region_index_count)?;
+    s.advance(u32::from(inner_index).checked_mul(
+        u32::from(short_delta_count) + u32::from(region_index_count))?);
 
     let mut delta = 0.0;
     let mut i = 0;
     while i < short_delta_count {
         let idx = region_indexes.get(i)?;
-        delta += s.read::<i16>()? as f32 * evaluate_region(idx, coordinates, region_s)?;
+        delta += f32::from(s.read::<i16>()?) * evaluate_region(idx, coordinates, region_s)?;
         i += 1;
     }
 
     while i < region_index_count {
         let idx = region_indexes.get(i)?;
-        delta += s.read::<i8>()? as f32 * evaluate_region(idx, coordinates, region_s)?;
+        delta += f32::from(s.read::<i8>()?) * evaluate_region(idx, coordinates, region_s)?;
         i += 1;
     }
 
@@ -104,18 +105,19 @@ fn parse_item_variation_data(
 
 fn evaluate_region(
     index: u16,
-    coordinates: &[i32],
+    coordinates: &[i16],
     mut s: Stream,
 ) -> Option<f32> {
-
     let axis_count: u16 = s.read()?;
     s.skip::<u16>(); // region_count
-    s.advance(index as u32 * axis_count as u32 * raw::RegionAxisCoordinatesRecord::SIZE as u32);
+    s.advance(u32::from(index)
+        .checked_mul(u32::from(axis_count))?
+        .checked_mul(raw::RegionAxisCoordinatesRecord::SIZE as u32)?);
 
     let mut v = 1.0;
     for i in 0..axis_count {
         let record: raw::RegionAxisCoordinatesRecord = s.read()?;
-        let coord = coordinates.get(i as usize).cloned().unwrap_or(0);
+        let coord = coordinates.get(usize::from(i)).cloned().unwrap_or(0);
         let factor = evaluate_axis(&record, coord);
         if factor == 0.0 {
             return Some(0.0);
@@ -127,10 +129,10 @@ fn evaluate_region(
     Some(v)
 }
 
-fn evaluate_axis(axis: &raw::RegionAxisCoordinatesRecord, coord: i32) -> f32 {
-    let start = axis.start_coord() as i32;
-    let peak = axis.peak_coord() as i32;
-    let end = axis.end_coord() as i32;
+fn evaluate_axis(axis: &raw::RegionAxisCoordinatesRecord, coord: i16) -> f32 {
+    let start = axis.start_coord();
+    let peak = axis.peak_coord();
+    let end = axis.end_coord();
 
     if start > peak || peak > end {
         return 1.0;

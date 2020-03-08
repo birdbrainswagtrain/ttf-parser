@@ -14,7 +14,7 @@ use crate::raw::fvar as raw;
 pub struct VariationAxis {
     pub tag: Tag,
     pub min_value: f32,
-    pub default_value: f32,
+    pub def_value: f32,
     pub max_value: f32,
     /// Axis name in `name` table.
     pub name_id: u16,
@@ -65,15 +65,15 @@ impl<'a> Iterator for VariationAxes<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         let record = self.iter.next()?;
 
-        let default_value = record.default_value();
-        let min_value = core::cmp::min(default_value, record.min_value());
-        let max_value = core::cmp::max(default_value, record.max_value());
+        let def_value = record.def_value();
+        let min_value = def_value.min(record.min_value());
+        let max_value = def_value.max(record.max_value());
 
         Some(VariationAxis {
             tag: record.axis_tag(),
-            min_value: min_value as f32 / 65536.0,
-            default_value: default_value as f32 / 65536.0,
-            max_value: max_value as f32 / 65536.0,
+            min_value,
+            def_value,
+            max_value,
             name_id: record.axis_name_id(),
             hidden: (record.flags() >> 3) & 1 == 1,
         })

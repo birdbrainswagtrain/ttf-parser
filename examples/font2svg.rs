@@ -96,7 +96,7 @@ fn process(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
     let var_coords = if font.is_variable() {
         let coords_len = font.variation_axes().count();
-        let mut coords = vec![0; coords_len];
+        let mut coords = vec![0i16; coords_len];
 
         if let Some(variations) = args.variations {
             for variation in variations {
@@ -104,15 +104,15 @@ fn process(args: Args) -> Result<(), Box<dyn std::error::Error>> {
                 if let Some((idx, axis)) = v {
                     let mut v = f32_bound(axis.min_value, variation.value, axis.max_value);
 
-                    if v == axis.default_value {
+                    if v == axis.def_value {
                         v = 0.0;
-                    } else if v < axis.default_value {
-                        v = (v - axis.default_value) / (axis.default_value - axis.min_value);
+                    } else if v < axis.def_value {
+                        v = (v - axis.def_value) / (axis.def_value - axis.min_value);
                     } else {
-                        v = (v - axis.default_value) / (axis.max_value - axis.default_value);
+                        v = (v - axis.def_value) / (axis.max_value - axis.def_value);
                     }
 
-                    coords[idx] = (v * 16384.0).round() as i32;
+                    coords[idx] = (v * 16384.0).round() as i16;
                 } else {
                     warn!("Font doesn't have a '{}' axis.", variation.tag);
                 }
@@ -215,7 +215,7 @@ fn glyph_to_path(
     glyph_id: ttf::GlyphId,
     cell_size: f64,
     scale: f64,
-    var_coords: &[i32],
+    var_coords: &[i16],
     svg: &mut xmlwriter::XmlWriter,
     path_buf: &mut svgtypes::Path,
 ) {

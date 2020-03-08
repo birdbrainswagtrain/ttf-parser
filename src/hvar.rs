@@ -8,7 +8,7 @@ impl<'a> Font<'a> {
     /// Parses glyph's variation offset for horizontal advance using
     /// [Horizontal Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hvar).
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i32
+    /// Note: coordinates should be converted from fixed point 2.14 to i16
     /// by multiplying each coordinate by 16384.
     ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
@@ -17,7 +17,7 @@ impl<'a> Font<'a> {
     pub fn glyph_hor_advance_variation(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i32],
+        coordinates: &[i16],
     ) -> Option<f32> {
         glyph_advance_variation(self.hvar?, glyph_id, coordinates)
     }
@@ -25,7 +25,7 @@ impl<'a> Font<'a> {
     /// Parses glyph's variation offset for horizontal side bearing using
     /// [Horizontal Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hvar).
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i32
+    /// Note: coordinates should be converted from fixed point 2.14 to i16
     /// by multiplying each coordinate by 16384.
     ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
@@ -34,7 +34,7 @@ impl<'a> Font<'a> {
     pub fn glyph_hor_side_bearing_variation(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i32],
+        coordinates: &[i16],
     ) -> Option<f32> {
         glyph_side_bearing_variation(self.hvar?, glyph_id, coordinates)
     }
@@ -84,7 +84,7 @@ impl<'a> DeltaSetIndexMap<'a> {
 pub fn glyph_advance_variation(
     data: &[u8], // HVAR or VVAR
     glyph_id: GlyphId,
-    coordinates: &[i32],
+    coordinates: &[i16],
 ) -> Option<f32> {
     let mut s = Stream::new(data);
 
@@ -111,7 +111,7 @@ pub fn glyph_advance_variation(
 pub fn glyph_side_bearing_variation(
     data: &[u8], // HVAR or VVAR
     glyph_id: GlyphId,
-    coordinates: &[i32],
+    coordinates: &[i16],
 ) -> Option<f32> {
     let mut s = Stream::new(data);
 

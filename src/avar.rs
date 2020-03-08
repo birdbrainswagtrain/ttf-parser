@@ -8,11 +8,11 @@ impl<'a> Font<'a> {
     /// Performs normalization mapping to variation coordinates
     /// using [Axis Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/avar).
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i32
+    /// Note: coordinates should be converted from fixed point 2.14 to i16
     /// by multiplying each coordinate by 16384.
     ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
-    pub fn map_variation_coordinates(&self, coordinates: &mut [i32]) -> Option<()> {
+    pub fn map_variation_coordinates(&self, coordinates: &mut [i16]) -> Option<()> {
         let mut s = Stream::new(self.avar?);
 
         let version: u32 = s.read()?;
@@ -38,8 +38,8 @@ impl<'a> Font<'a> {
 
 #[derive(Clone, Copy)]
 struct AxisValueMapRecord {
-    from_coordinate: i32,
-    to_coordinate: i32,
+    from_coordinate: i16,
+    to_coordinate: i16,
 }
 
 impl FromData for AxisValueMapRecord {
@@ -49,13 +49,13 @@ impl FromData for AxisValueMapRecord {
     fn parse(data: &[u8]) -> Self {
         let mut s = SafeStream::new(data);
         AxisValueMapRecord {
-            from_coordinate: s.read::<i16>() as i32,
-            to_coordinate: s.read::<i16>() as i32,
+            from_coordinate: s.read(),
+            to_coordinate: s.read(),
         }
     }
 }
 
-fn map_value(map: &LazyArray16<AxisValueMapRecord>, value: i32) -> i32 {
+fn map_value(map: &LazyArray16<AxisValueMapRecord>, value: i16) -> i16 {
     // This code is based on harfbuzz implementation.
 
     if map.len() == 0 {
