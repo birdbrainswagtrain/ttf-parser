@@ -1,21 +1,11 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/gpos
 
-use crate::Font;
 use crate::ggg::*;
-
-
-impl<'a> Font<'a> {
-    /// Returns a reference to a [Glyph Positioning Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos).
-    pub fn positioning_table(&self) -> Option<PositioningTable<'a>> {
-        self.gpos.map(|table| PositioningTable { table })
-    }
-}
-
 
 /// A reference to a [Glyph Positioning Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos).
 #[derive(Clone, Copy)]
 pub struct PositioningTable<'a> {
-    table: GsubGposTable<'a>,
+    pub(crate) table: GsubGposTable<'a>,
 }
 
 impl<'a> GlyphPosSubTable for PositioningTable<'a> {

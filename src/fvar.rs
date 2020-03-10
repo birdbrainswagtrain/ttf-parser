@@ -2,7 +2,7 @@
 
 use core::num::NonZeroU16;
 
-use crate::{Font, Tag};
+use crate::Tag;
 use crate::parser::{Stream, Offset16, Offset, LazyArray16, LazyArrayIter};
 use crate::raw::fvar as raw;
 
@@ -49,9 +49,14 @@ impl<'a> Table<'a> {
 
         Some(Table { axes })
     }
+
+    pub fn axes(&self) -> VariationAxes<'a> {
+        VariationAxes { iter: self.axes.into_iter() }
+    }
 }
 
 
+/// An iterator over variation axes.
 #[allow(missing_debug_implementations)]
 #[derive(Clone, Copy, Default)]
 pub struct VariationAxes<'a> {
@@ -82,14 +87,5 @@ impl<'a> Iterator for VariationAxes<'a> {
     #[inline]
     fn count(self) -> usize {
         self.iter.count()
-    }
-}
-
-
-impl<'a> Font<'a> {
-    /// Returns an iterator over variation axes.
-    pub fn variation_axes(&self) -> VariationAxes {
-        self.fvar.map(|fvar| VariationAxes { iter: fvar.axes.into_iter() })
-            .unwrap_or_default()
     }
 }

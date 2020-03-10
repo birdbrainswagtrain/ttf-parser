@@ -1,21 +1,11 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/gsub
 
-use crate::Font;
 use crate::ggg::*;
-
-
-impl<'a> Font<'a> {
-    /// Returns a reference to a [Glyph Substitution Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gsub).
-    pub fn substitution_table(&self) -> Option<SubstitutionTable<'a>> {
-        self.gsub.map(|table| SubstitutionTable { table })
-    }
-}
-
 
 /// A reference to a [Glyph Substitution Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gsub).
 #[derive(Clone, Copy)]
 pub struct SubstitutionTable<'a> {
-    table: GsubGposTable<'a>,
+    pub(crate) table: GsubGposTable<'a>,
 }
 
 impl<'a> GlyphPosSubTable for SubstitutionTable<'a> {

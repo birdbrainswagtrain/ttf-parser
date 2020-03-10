@@ -1,46 +1,35 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/mvar
 
-use crate::{Font, Tag};
+use crate::Tag;
 use crate::parser::{Stream, Offset, Offset16, Offset32};
 use crate::raw::mvar as raw;
 
 
-impl<'a> Font<'a> {
-    /// Parses metrics variation offset using
-    /// [Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/mvar).
-    ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
-    ///
-    /// Returns `None` when `MVAR` table is not present or invalid.
-    pub fn metrics_variation(&self, tag: Tag, coordinates: &[i16]) -> Option<f32> {
-        let mut s = Stream::new(self.mvar?);
+pub fn metrics_variation(data: &[u8], tag: Tag, coordinates: &[i16]) -> Option<f32> {
+    let mut s = Stream::new(data);
 
-        let version: u32 = s.read()?;
-        if version != 0x00010000 {
-            return None;
-        }
-
-        s.skip::<u16>(); // reserved
-        s.skip::<u16>(); // valueRecordSize
-
-        let count: u16 = s.read()?;
-        if count == 0 {
-            return None;
-        }
-
-        let variation_store_offset = s.read::<Option<Offset16>>()?;
-
-        let value_records = s.read_array::<raw::ValueRecord, u16>(count)?;
-        let (_, record) = value_records.binary_search_by(|r| r.value_tag().cmp(&tag))?;
-
-        let mut s2 = Stream::new_at(self.mvar?, variation_store_offset?.to_usize());
-        parse_item_variation_store(
-            record.delta_set_outer_index(), record.delta_set_inner_index(), coordinates, &mut s2,
-        )
+    let version: u32 = s.read()?;
+    if version != 0x00010000 {
+        return None;
     }
+
+    s.skip::<u16>(); // reserved
+    s.skip::<u16>(); // valueRecordSize
+
+    let count: u16 = s.read()?;
+    if count == 0 {
+        return None;
+    }
+
+    let variation_store_offset = s.read::<Option<Offset16>>()?;
+
+    let value_records = s.read_array::<raw::ValueRecord, u16>(count)?;
+    let (_, record) = value_records.binary_search_by(|r| r.value_tag().cmp(&tag))?;
+
+    let mut s2 = Stream::new_at(data, variation_store_offset?.to_usize());
+    parse_item_variation_store(
+        record.delta_set_outer_index(), record.delta_set_inner_index(), coordinates, &mut s2,
+    )
 }
 
 pub fn parse_item_variation_store(

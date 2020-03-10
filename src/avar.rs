@@ -1,39 +1,28 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/avar
 
-use crate::Font;
 use crate::parser::{Stream, SafeStream, LazyArray16, FromData};
 
+pub fn map_variation_coordinates(data: &[u8], coordinates: &mut [i16]) -> Option<()> {
+    let mut s = Stream::new(data);
 
-impl<'a> Font<'a> {
-    /// Performs normalization mapping to variation coordinates
-    /// using [Axis Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/avar).
-    ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
-    pub fn map_variation_coordinates(&self, coordinates: &mut [i16]) -> Option<()> {
-        let mut s = Stream::new(self.avar?);
-
-        let version: u32 = s.read()?;
-        if version != 0x00010000 {
-            return None;
-        }
-
-        s.skip::<u16>(); // reserved
-        // TODO: check that `axisCount` is the same as in `fvar`?
-        let axis_count = s.read::<u16>()? as usize;
-        if axis_count != coordinates.len() {
-            return None;
-        }
-
-        for i in 0..axis_count {
-            let map = s.read_array16::<AxisValueMapRecord>()?;
-            coordinates[i] = map_value(&map, coordinates[i]);
-        }
-
-        Some(())
+    let version: u32 = s.read()?;
+    if version != 0x00010000 {
+        return None;
     }
+
+    s.skip::<u16>(); // reserved
+    // TODO: check that `axisCount` is the same as in `fvar`?
+    let axis_count = s.read::<u16>()? as usize;
+    if axis_count != coordinates.len() {
+        return None;
+    }
+
+    for i in 0..axis_count {
+        let map = s.read_array16::<AxisValueMapRecord>()?;
+        coordinates[i] = map_value(&map, coordinates[i]);
+    }
+
+    Some(())
 }
 
 #[derive(Clone, Copy)]

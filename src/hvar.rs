@@ -1,44 +1,7 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/hvar
 
-use crate::{Font, GlyphId};
+use crate::GlyphId;
 use crate::parser::{Stream, Offset, Offset32};
-
-
-impl<'a> Font<'a> {
-    /// Parses glyph's variation offset for horizontal advance using
-    /// [Horizontal Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hvar).
-    ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
-    ///
-    /// Returns `None` when `HVAR` table is not present or invalid.
-    pub fn glyph_hor_advance_variation(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[i16],
-    ) -> Option<f32> {
-        glyph_advance_variation(self.hvar?, glyph_id, coordinates)
-    }
-
-    /// Parses glyph's variation offset for horizontal side bearing using
-    /// [Horizontal Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hvar).
-    ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
-    ///
-    /// Returns `None` when `HVAR` table is not present or invalid.
-    pub fn glyph_hor_side_bearing_variation(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[i16],
-    ) -> Option<f32> {
-        glyph_side_bearing_variation(self.hvar?, glyph_id, coordinates)
-    }
-}
 
 pub struct DeltaSetIndexMap<'a> {
     data: &'a [u8],
