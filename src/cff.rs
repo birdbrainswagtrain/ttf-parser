@@ -6,8 +6,9 @@
 use core::convert::TryFrom;
 use core::ops::Range;
 
+use crate::{GlyphId, OutlineBuilder, Rect, BBox};
 use crate::parser::{Stream, U24, FromData};
-use crate::{Font, GlyphId, OutlineBuilder, Rect, BBox};
+
 
 // Limits according to the Adobe Technical Note #5176, chapter 4 DICT Data.
 const MAX_OPERANDS_LEN: usize = 48;
@@ -204,22 +205,19 @@ pub(crate) fn parse_metadata(data: &[u8]) -> Option<Metadata> {
 }
 
 
-impl<'a> Font<'a> {
-    pub(crate) fn cff_glyph_outline(
-        &self,
-        metadata: &Metadata,
-        glyph_id: GlyphId,
-        builder: &mut dyn OutlineBuilder,
-    ) -> Option<Rect> {
-        let data = metadata.char_strings.get(glyph_id.0)?;
-        match parse_char_string(data, metadata, builder) {
-            Ok(bbox) => Some(bbox),
-            Err(CFFError::ZeroBBox) => None,
-            #[allow(unused_variables)]
-            Err(e) => {
-                warn!("Glyph {} parsing failed cause {}.", glyph_id.0, e);
-                None
-            }
+pub fn outline(
+    metadata: &Metadata,
+    glyph_id: GlyphId,
+    builder: &mut dyn OutlineBuilder,
+) -> Option<Rect> {
+    let data = metadata.char_strings.get(glyph_id.0)?;
+    match parse_char_string(data, metadata, builder) {
+        Ok(bbox) => Some(bbox),
+        Err(CFFError::ZeroBBox) => None,
+        #[allow(unused_variables)]
+        Err(e) => {
+            warn!("Glyph {} parsing failed cause {}.", glyph_id.0, e);
+            None
         }
     }
 }

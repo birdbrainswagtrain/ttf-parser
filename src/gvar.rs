@@ -4,7 +4,7 @@
 use core::cmp;
 use core::num::NonZeroU16;
 
-use crate::{Font, GlyphId, OutlineBuilder, Rect, BBox};
+use crate::{loca, GlyphId, OutlineBuilder, Rect, BBox};
 use crate::parser::{Stream, Offset, Offset16, Offset32, LazyArray16, F2DOT14};
 use crate::glyf::{self, Transform};
 
@@ -72,120 +72,20 @@ impl<'a> Table<'a> {
             glyphs_variation_data,
         })
     }
-}
 
-
-impl<'a> Font<'a> {
-    pub(crate) fn glyf_glyph_outline_var(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[i16],
-        builder: &mut dyn OutlineBuilder,
-    ) -> Option<Rect> {
-        let mut b = glyf::Builder::new(Transform::default(), Some(BBox::new()), builder);
-        let glyph_data = self.glyph_data(glyph_id)?;
-        self.outline_var_impl(glyph_id, glyph_data, coordinates, 0, &mut b);
-        b.bbox.and_then(|bbox| bbox.to_rect())
-    }
-
-    fn outline_var_impl(
-        &self,
-        glyph_id: GlyphId,
-        data: &[u8],
-        coordinates: &[i16],
-        depth: u8,
-        builder: &mut glyf::Builder,
-    ) -> Option<()> {
-        if depth >= glyf::MAX_COMPONENTS {
-            warn!("Recursion detected in the 'glyf' table.");
-            return None;
-        }
-
-        let mut s = Stream::new(data);
-        let number_of_contours: i16 = s.read()?;
-
-        // Skip bbox.
-        //
-        // In case of a variable font, a bounding box defined in the `glyf` data
-        // refers to the default variation values. Which is not what we want.
-        // Instead, we have to manually calculate outline's bbox.
-        s.advance(8u32);
-
-        if number_of_contours > 0 {
-            // Simple glyph.
-
-            let number_of_contours = NonZeroU16::new(number_of_contours as u16)?;
-            let mut glyph_points = glyf::parse_simple_outline(s.tail()?, number_of_contours)?;
-            let all_glyph_points = glyph_points.clone();
-            let points_len = glyph_points.points_left;
-            let mut tuples = self.gvar_parse_variation_data(glyph_id, coordinates, points_len)?;
-
-            while let Some(point) = glyph_points.next() {
-                let (x, y) = tuples.apply(all_glyph_points.clone(), glyph_points.clone(), point)?;
-                builder.push_point(x, y, point.on_curve_point, point.last_point);
-            }
-
-            Some(())
-        } else if number_of_contours < 0 {
-            // Composite glyph.
-
-            // In case of a composite glyph, `gvar` data contains position adjustments
-            // for each component.
-            // Basically, an additional translation used during transformation.
-            // So we have to push zero points manually, instead of parsing the `glyf` data.
-            //
-            // Details:
-            // https://docs.microsoft.com/en-us/typography/opentype/spec/gvar#point-numbers-and-processing-for-composite-glyphs
-
-            let mut components = glyf::CompositeGlyphIter::new(s.tail()?);
-            let components_count = components.clone().count() as u16;
-            let mut tuples = self.gvar_parse_variation_data(glyph_id, coordinates, components_count)?;
-
-            while let Some(component) = components.next() {
-                let (tx, ty) = tuples.apply_null()?;
-
-                let mut transform = builder.transform;
-
-                // Variation component offset should be applied only when
-                // the ARGS_ARE_XY_VALUES flag is set.
-                if component.flags.args_are_xy_values() {
-                    transform = Transform::combine(transform, Transform::new_translate(tx, ty));
-                }
-
-                transform = Transform::combine(transform, component.transform);
-
-                let mut b = glyf::Builder::new(transform, builder.bbox, builder.builder);
-                let glyph_data = self.glyph_data(component.glyph_id)?;
-                self.outline_var_impl(
-                    component.glyph_id, glyph_data, coordinates, depth + 1, &mut b,
-                ).unwrap();
-
-                // Take updated bbox.
-                builder.bbox = b.bbox;
-            }
-
-            Some(())
-        } else {
-            // An empty glyph.
-            None
-        }
-    }
-
-    fn gvar_parse_variation_data(
+    fn parse_variation_data(
         &self,
         glyph_id: GlyphId,
         coordinates: &[i16],
         points_len: u16,
     ) -> Option<VariationTuples> {
-        let table = self.gvar?;
-
-        if coordinates.len() != usize::from(table.axis_count.get()) {
+        if coordinates.len() != usize::from(self.axis_count.get()) {
             return None;
         }
 
         let next_glyph_id = glyph_id.0.checked_add(1)?;
 
-        let (start, end) = match table.offsets {
+        let (start, end) = match self.offsets {
             GlyphVariationDataOffsets::Short(ref array) => {
                 // 'If the short format (Offset16) is used for offsets,
                 // the value stored is the offset divided by 2.'
@@ -201,8 +101,112 @@ impl<'a> Font<'a> {
             return Some(VariationTuples::default());
         }
 
-        let data = table.glyphs_variation_data.get(start..end)?;
-        parse_variation_data(coordinates, &table.shared_tuple_records, points_len, data)
+        let data = self.glyphs_variation_data.get(start..end)?;
+        parse_variation_data(coordinates, &self.shared_tuple_records, points_len, data)
+    }
+}
+
+
+pub fn outline_variable(
+    loca_table: loca::Table,
+    glyf_table: &[u8],
+    gvar_table: &Table,
+    glyph_id: GlyphId,
+    coordinates: &[i16],
+    builder: &mut dyn OutlineBuilder,
+) -> Option<Rect> {
+    let mut b = glyf::Builder::new(Transform::default(), Some(BBox::new()), builder);
+    let range = loca_table.glyph_range(glyph_id)?;
+    let glyph_data = glyf_table.get(range)?;
+    outline_var_impl(loca_table, glyph_data, gvar_table,
+                     glyph_id, glyph_data, coordinates, 0, &mut b);
+    b.bbox.and_then(|bbox| bbox.to_rect())
+}
+
+fn outline_var_impl(
+    loca_table: loca::Table,
+    glyf_table: &[u8],
+    gvar_table: &Table,
+    glyph_id: GlyphId,
+    data: &[u8],
+    coordinates: &[i16],
+    depth: u8,
+    builder: &mut glyf::Builder,
+) -> Option<()> {
+    if depth >= glyf::MAX_COMPONENTS {
+        warn!("Recursion detected in the 'glyf' table.");
+        return None;
+    }
+
+    let mut s = Stream::new(data);
+    let number_of_contours: i16 = s.read()?;
+
+    // Skip bbox.
+    //
+    // In case of a variable font, a bounding box defined in the `glyf` data
+    // refers to the default variation values. Which is not what we want.
+    // Instead, we have to manually calculate outline's bbox.
+    s.advance(8u32);
+
+    if number_of_contours > 0 {
+        // Simple glyph.
+
+        let number_of_contours = NonZeroU16::new(number_of_contours as u16)?;
+        let mut glyph_points = glyf::parse_simple_outline(s.tail()?, number_of_contours)?;
+        let all_glyph_points = glyph_points.clone();
+        let points_len = glyph_points.points_left;
+        let mut tuples = gvar_table.parse_variation_data(glyph_id, coordinates, points_len)?;
+
+        while let Some(point) = glyph_points.next() {
+            let (x, y) = tuples.apply(all_glyph_points.clone(), glyph_points.clone(), point)?;
+            builder.push_point(x, y, point.on_curve_point, point.last_point);
+        }
+
+        Some(())
+    } else if number_of_contours < 0 {
+        // Composite glyph.
+
+        // In case of a composite glyph, `gvar` data contains position adjustments
+        // for each component.
+        // Basically, an additional translation used during transformation.
+        // So we have to push zero points manually, instead of parsing the `glyf` data.
+        //
+        // Details:
+        // https://docs.microsoft.com/en-us/typography/opentype/spec/gvar#point-numbers-and-processing-for-composite-glyphs
+
+        let mut components = glyf::CompositeGlyphIter::new(s.tail()?);
+        let components_count = components.clone().count() as u16;
+        let mut tuples = gvar_table.parse_variation_data(glyph_id, coordinates, components_count)?;
+
+        while let Some(component) = components.next() {
+            let (tx, ty) = tuples.apply_null()?;
+
+            let mut transform = builder.transform;
+
+            // Variation component offset should be applied only when
+            // the ARGS_ARE_XY_VALUES flag is set.
+            if component.flags.args_are_xy_values() {
+                transform = Transform::combine(transform, Transform::new_translate(tx, ty));
+            }
+
+            transform = Transform::combine(transform, component.transform);
+
+            let mut b = glyf::Builder::new(transform, builder.bbox, builder.builder);
+            let range = loca_table.glyph_range(glyph_id)?;
+            let glyph_data = glyf_table.get(range)?;
+            outline_var_impl(
+                loca_table, glyf_table, gvar_table, component.glyph_id,
+                glyph_data, coordinates, depth + 1, &mut b,
+            ).unwrap();
+
+            // Take updated bbox.
+            builder.bbox = b.bbox;
+        }
+
+        Some(())
+    } else {
+        // An empty glyph.
+        None
     }
 }
 

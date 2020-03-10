@@ -4,7 +4,7 @@
 
 use core::num::NonZeroU16;
 
-use crate::{Font, GlyphId, OutlineBuilder, Rect, BBox};
+use crate::{loca, GlyphId, OutlineBuilder, Rect, BBox};
 use crate::parser::{Stream, F2DOT14, FromData, LazyArrayIter};
 
 pub(crate) struct Builder<'a> {
@@ -201,79 +201,84 @@ pub fn f32_bound(min: f32, val: f32, max: f32) -> f32 {
 // It's not defined in the spec, so we are using our own value.
 pub const MAX_COMPONENTS: u8 = 32;
 
-impl<'a> Font<'a> {
-    pub(crate) fn glyf_glyph_outline(
-        &self,
-        glyph_id: GlyphId,
-        builder: &mut dyn OutlineBuilder,
-    ) -> Option<Rect> {
-        let mut b = Builder::new(Transform::default(), None, builder);
-        let glyph_data = self.glyph_data(glyph_id)?;
-        self.outline_impl(glyph_data, 0, &mut b)
+
+#[inline]
+pub fn outline(
+    loca_table: loca::Table,
+    glyf_table: &[u8],
+    glyph_id: GlyphId,
+    builder: &mut dyn OutlineBuilder,
+) -> Option<Rect> {
+    let mut b = Builder::new(Transform::default(), None, builder);
+    let range = loca_table.glyph_range(glyph_id)?;
+    let glyph_data = glyf_table.get(range)?;
+    outline_impl(loca_table, glyf_table, glyph_data, 0, &mut b)
+}
+
+#[inline]
+pub fn glyph_bbox(
+    loca_table: loca::Table,
+    glyf_table: &[u8],
+    glyph_id: GlyphId,
+) -> Option<Rect> {
+    let range = loca_table.glyph_range(glyph_id)?;
+    let glyph_data = glyf_table.get(range)?;
+    let mut s = Stream::new(glyph_data);
+    s.skip::<i16>(); // number_of_contours
+    // It's faster to parse the rect directly, instead of using `FromData`.
+    Some(Rect {
+        x_min: s.read()?,
+        y_min: s.read()?,
+        x_max: s.read()?,
+        y_max: s.read()?,
+    })
+}
+
+fn outline_impl(
+    loca_table: loca::Table,
+    glyf_table: &[u8],
+    data: &[u8],
+    depth: u8,
+    builder: &mut Builder,
+) -> Option<Rect> {
+    if depth >= MAX_COMPONENTS {
+        warn!("Recursion detected in the 'glyf' table.");
+        return None;
     }
 
-    pub(crate) fn glyf_glyph_bbox(&self, glyph_id: GlyphId) -> Option<Rect> {
-        let glyph_data = self.glyph_data(glyph_id)?;
-        let mut s = Stream::new(glyph_data);
-        s.skip::<i16>(); // number_of_contours
-        // It's faster to parse the rect directly, instead of using `FromData`.
-        Some(Rect {
-            x_min: s.read()?,
-            y_min: s.read()?,
-            x_max: s.read()?,
-            y_max: s.read()?,
-        })
-    }
+    let mut s = Stream::new(data);
+    let number_of_contours: i16 = s.read()?;
+    // It's faster to parse the rect directly, instead of using `FromData`.
+    let rect = Rect {
+        x_min: s.read()?,
+        y_min: s.read()?,
+        x_max: s.read()?,
+        y_max: s.read()?,
+    };
 
-    pub(crate) fn glyph_data(&self, glyph_id: GlyphId) -> Option<&[u8]> {
-        let range = self.glyph_range(glyph_id)?;
-        let data = self.glyf?;
-        data.get(range)
-    }
-
-    fn outline_impl(
-        &self,
-        data: &[u8],
-        depth: u8,
-        builder: &mut Builder,
-    ) -> Option<Rect> {
-        if depth >= MAX_COMPONENTS {
-            warn!("Recursion detected in the 'glyf' table.");
-            return None;
+    if number_of_contours > 0 {
+        // Simple glyph.
+        let number_of_contours = NonZeroU16::new(number_of_contours as u16)?;
+        for point in parse_simple_outline(s.tail()?, number_of_contours)? {
+            builder.push_point(point.x as f32, point.y as f32, point.on_curve_point, point.last_point);
         }
-
-        let mut s = Stream::new(data);
-        let number_of_contours: i16 = s.read()?;
-        // It's faster to parse the rect directly, instead of using `FromData`.
-        let rect = Rect {
-            x_min: s.read()?,
-            y_min: s.read()?,
-            x_max: s.read()?,
-            y_max: s.read()?,
-        };
-
-        if number_of_contours > 0 {
-            // Simple glyph.
-            let number_of_contours = NonZeroU16::new(number_of_contours as u16)?;
-            for point in parse_simple_outline(s.tail()?, number_of_contours)? {
-                builder.push_point(point.x as f32, point.y as f32, point.on_curve_point, point.last_point);
-            }
-        } else if number_of_contours < 0 {
-            // Composite glyph.
-            for comp in CompositeGlyphIter::new(s.tail()?) {
-                if let Some(glyph_data) = self.glyph_data(comp.glyph_id) {
+    } else if number_of_contours < 0 {
+        // Composite glyph.
+        for comp in CompositeGlyphIter::new(s.tail()?) {
+            if let Some(range) = loca_table.glyph_range(comp.glyph_id) {
+                if let Some(glyph_data) = glyf_table.get(range) {
                     let transform = Transform::combine(builder.transform, comp.transform);
                     let mut b = Builder::new(transform, builder.bbox, builder.builder);
-                    self.outline_impl(glyph_data, depth + 1, &mut b)?;
+                    outline_impl(loca_table, glyf_table, glyph_data, depth + 1, &mut b)?;
                 }
             }
-        } else {
-            // An empty glyph.
-            return None;
         }
-
-        Some(rect)
+    } else {
+        // An empty glyph.
+        return None;
     }
+
+    Some(rect)
 }
 
 #[inline(never)]
@@ -321,7 +326,7 @@ pub fn parse_simple_outline(
 /// Resolves the X coordinates length.
 ///
 /// The length depends on *Simple Glyph Flags*, so we have to process them all to find it.
-pub fn resolve_x_coords_len(
+fn resolve_x_coords_len(
     s: &mut Stream,
     points_total: u16,
 ) -> Option<u16> {
@@ -333,7 +338,7 @@ pub fn resolve_x_coords_len(
         // The number of times a glyph point repeats.
         let repeats = if flags.repeat_flag() {
             let repeats: u8 = s.read()?;
-            repeats as u16 + 1
+            u16::from(repeats) + 1
         } else {
             1
         };
