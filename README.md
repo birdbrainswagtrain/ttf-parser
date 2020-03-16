@@ -207,18 +207,25 @@ There are roughly three types of TrueType tables:
 | Memory safe       | ✓                      |                     |                                |
 | Thread safe       | ✓                      |                     |                                |
 | Zero allocation   | ✓                      |                     |                                |
+| Variable fonts    | ✓                      | ✓                   |                                |
+| `avar` table      | ✓                      | ✓                   |                                |
 | `CFF `&nbsp;table | ✓                      | ✓                   | ✓                              |
+| `CFF2` table      | ✓                      | ✓                   |                                |
 | `cmap` table      | ~ (no 8; Unicode-only) | ✓                   | ~ (no 2,8,10,14; Unicode-only) |
+| `fvar` table      | ✓                      | ✓                   |                                |
 | `gasp` table      |                        | ✓                   |                                |
 | `GDEF` table      | ~                      |                     |                                |
 | `glyf` table      | ✓                      | ✓                   | ✓                              |
 | `GPOS` table      |                        |                     | ~ (only 2)                     |
 | `GSUB` table      |                        |                     |                                |
+| `gvar` table      | ✓                      | ✓                   |                                |
 | `head` table      | ✓                      | ✓                   | ✓                              |
 | `hhea` table      | ✓                      | ✓                   | ✓                              |
 | `hmtx` table      | ✓                      | ✓                   | ✓                              |
+| `HVAR` table      | ✓                      | ✓                   |                                |
 | `kern` table      | ~                      | ~                   | ~                              |
 | `maxp` table      | ✓                      | ✓                   | ✓                              |
+| `MVAR` table      | ✓                      | ✓                   |                                |
 | `name` table      | ✓                      | ✓                   |                                |
 | `OS/2` table      | ✓                      | ✓                   |                                |
 | `post` table      | ✓                      | ✓                   |                                |
@@ -226,7 +233,7 @@ There are roughly three types of TrueType tables:
 | `vhea` table      | ✓                      | ✓                   |                                |
 | `vmtx` table      | ✓                      | ✓                   |                                |
 | `VORG` table      | ✓                      | ✓                   |                                |
-| Variable fonts    |                        | ✓                   |                                |
+| `VVAR` table      | ✓                      | ✓                   |                                |
 | Rendering         |                        | ✓                   | ~<sup>1</sup>                  |
 | Language          | Rust + C API           | C                   | C                              |
 | Dynamic lib size  | ~250KiB                | ~760KiB<sup>2</sup> | ? (header-only)                |
