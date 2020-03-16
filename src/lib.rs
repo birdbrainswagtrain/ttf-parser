@@ -242,6 +242,7 @@ mod parser;
 mod post;
 mod raw;
 mod vorg;
+mod var_store;
 
 #[cfg(feature = "std")]
 mod writer;
@@ -1318,9 +1319,10 @@ impl<'a> Font<'a> {
             return cff::outline(metadata, glyph_id, builder);
         }
 
-        if let Some(ref metadata) = self.cff2 {
-            return cff2::outline(metadata, glyph_id, builder);
-        }
+        // TODO: use default coords
+        // if let Some(ref metadata) = self.cff2 {
+        //     return cff2::outline(metadata, glyph_id, builder);
+        // }
 
         None
     }
@@ -1347,12 +1349,14 @@ impl<'a> Font<'a> {
         coordinates: &[i16],
         builder: &mut dyn OutlineBuilder,
     ) -> Option<Rect> {
-        if self.is_variable() {
-            return gvar::outline_variable(self.loca?, self.glyf?, self.gvar.as_ref()?,
-                                          glyph_id, coordinates, builder);
+        if let Some(ref gvar_table) = self.gvar {
+            return gvar::outline_variable(self.loca?, self.glyf?, gvar_table,
+                                          coordinates, glyph_id, builder);
         }
 
-        // TODO: cff2
+        if let Some(ref metadata) = self.cff2 {
+            return cff2::outline(metadata, coordinates, glyph_id, builder);
+        }
 
         None
     }
@@ -1375,9 +1379,10 @@ impl<'a> Font<'a> {
             return cff::outline(metadata, glyph_id, &mut DummyOutline);
         }
 
-        if let Some(ref metadata) = self.cff2 {
-            return cff2::outline(metadata, glyph_id, &mut DummyOutline);
-        }
+        // TODO: use default coords
+        // if let Some(ref metadata) = self.cff2 {
+        //     return cff2::outline(metadata, glyph_id, &mut DummyOutline);
+        // }
 
         None
     }
@@ -1394,11 +1399,11 @@ impl<'a> Font<'a> {
     ) -> Option<Rect> {
         if self.gvar.is_some() {
             return gvar::outline_variable(self.loca?, self.glyf?, self.gvar.as_ref()?,
-                                          glyph_id, coordinates, &mut DummyOutline);
+                                          coordinates, glyph_id, &mut DummyOutline);
         }
 
         if let Some(ref metadata) = self.cff2 {
-            return cff2::outline(metadata, glyph_id, &mut DummyOutline);
+            return cff2::outline(metadata, coordinates, glyph_id, &mut DummyOutline);
         }
 
         None

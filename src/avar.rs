@@ -1,5 +1,7 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/avar
 
+use core::convert::TryFrom;
+
 use crate::parser::{Stream, SafeStream, LazyArray16, FromData};
 
 pub fn map_variation_coordinates(data: &[u8], coordinates: &mut [i16]) -> Option<()> {
@@ -78,8 +80,9 @@ fn map_value(map: &LazyArray16<AxisValueMapRecord>, value: i16) -> i16 {
         return record_prev.to_coordinate;
     }
 
-    let denom = record_i.from_coordinate - record_prev.from_coordinate;
-    record_prev.to_coordinate +
-        ((record_i.to_coordinate - record_prev.to_coordinate) *
-            (value - record_prev.from_coordinate) + denom / 2) / denom
+    let denom = record_i.from_coordinate as i32 - record_prev.from_coordinate as i32;
+    let value = record_prev.to_coordinate as i32 +
+        ((record_i.to_coordinate as i32 - record_prev.to_coordinate as i32) *
+            (value as i32 - record_prev.from_coordinate as i32) + denom / 2) / denom;
+    i16::try_from(value).unwrap_or(0)
 }

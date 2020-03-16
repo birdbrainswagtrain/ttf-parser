@@ -1,13 +1,12 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/cff2
 // https://docs.microsoft.com/en-us/typography/opentype/spec/cff2charstr
-// https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#item-variation-store
 
 use core::convert::TryFrom;
 use core::ops::Range;
 
 use crate::{GlyphId, OutlineBuilder, Rect, BBox};
-use crate::parser::{Stream, LazyArray16};
-
+use crate::parser::{Stream, TryNumConv};
+use crate::var_store::*;
 use crate::cff::{
     Builder, DataIndex, IsEven, Operator, ArgumentsStack, CFFError,
     calc_subroutine_bias, f32_abs, parse_number, skip_number, parse_index_impl,
@@ -81,23 +80,6 @@ pub struct Metadata<'a> {
     local_subrs: DataIndex<'a>,
     char_strings: DataIndex<'a>,
     item_variation_store: ItemVariationStore<'a>,
-    variation_region: u16,
-}
-
-#[derive(Clone, Copy)]
-struct ItemVariationStore<'a> {
-    data: &'a [u8],
-    offsets: LazyArray16<'a, u32>,
-}
-
-impl<'a> Default for ItemVariationStore<'a> {
-    #[inline]
-    fn default() -> Self {
-        ItemVariationStore {
-            data: &[],
-            offsets: LazyArray16::new(&[]),
-        }
-    }
 }
 
 pub(crate) fn parse_metadata(data: &[u8]) -> Option<Metadata> {
@@ -133,8 +115,8 @@ pub(crate) fn parse_metadata(data: &[u8]) -> Option<Metadata> {
 
     if let Some(offset) = top_dict.variation_store_offset {
         let mut s = Stream::new_at(data, offset);
-        metadata.item_variation_store = parse_variation_store(&mut s)?;
-        metadata.variation_region = parse_variation_regions(metadata.item_variation_store, 0).ok()?;
+        s.skip::<u16>(); // length
+        metadata.item_variation_store = ItemVariationStore::new(s)?;
     }
 
     // TODO: simplify
@@ -164,11 +146,12 @@ pub(crate) fn parse_metadata(data: &[u8]) -> Option<Metadata> {
 
 pub fn outline(
     metadata: &Metadata,
+    coordinates: &[i16],
     glyph_id: GlyphId,
     builder: &mut dyn OutlineBuilder,
 ) -> Option<Rect> {
     let data = metadata.char_strings.get(glyph_id.0)?;
-    match parse_char_string(data, metadata, builder) {
+    match parse_char_string(data, metadata, coordinates, builder) {
         Ok(bbox) => Some(bbox),
         Err(CFFError::ZeroBBox) => None,
         #[allow(unused_variables)]
@@ -266,76 +249,108 @@ fn parse_private_dict(data: &[u8]) -> Option<usize> {
     subroutines_offset
 }
 
-// https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#item-variation-store-header-and-item-variation-data-subtables
-fn parse_variation_store<'a>(s: &mut Stream<'a>) -> Option<ItemVariationStore<'a>> {
-    let length: u16 = s.read()?;
-    let data = s.read_bytes(length)?;
+/// CFF2 allows up to 65535 scalars, but an average font will have 3-5.
+/// So 64 is more than enough.
+const SCALARS_MAX: u8 = 64;
 
-    let mut s = Stream::new(data);
-    let format: u16 = s.read()?;
-    if format != 1 {
-        return None;
-    }
-
-    s.skip::<u32>(); // variation_region_list_offset
-    let offsets = s.read_array16::<u32>()?;
-
-    Some(ItemVariationStore { data, offsets })
+#[derive(Clone, Copy)]
+pub struct Scalars {
+    d: [f32; SCALARS_MAX as usize], // 256B
+    len: u8,
 }
 
-fn parse_variation_regions(store: ItemVariationStore, vsindex: u16) -> Result<u16, CFFError> {
-    #[inline]
-    fn parse(store: ItemVariationStore, vsindex: u16) -> Option<u16> {
-        // Offsets in bytes from the start of the item variation store
-        // to each item variation data subtable.
-        let offset = store.offsets.get(vsindex)?;
-        let mut s2 = Stream::new_at(store.data, offset as usize);
-        s2.skip::<u16>(); // item_count
-        s2.skip::<u16>(); // short_delta_count
-        let region_index_count: u16 = s2.read()?;
-        Some(region_index_count)
+impl Default for Scalars {
+    fn default() -> Self {
+        Scalars {
+            d: [0.0; SCALARS_MAX as usize],
+            len: 0,
+        }
+    }
+}
+
+impl Scalars {
+    pub fn len(&self) -> u8 {
+        self.len
     }
 
-    parse(store, vsindex).ok_or(CFFError::InvalidItemVariationDataIndex)
+    pub fn clear(&mut self) {
+        self.len = 0;
+    }
+
+    pub fn at(&self, i: u8) -> f32 {
+        if i < self.len {
+            self.d[usize::from(i)]
+        } else {
+            0.0
+        }
+    }
+
+    pub fn push(&mut self, n: f32) -> Option<()> {
+        if self.len < SCALARS_MAX {
+            self.d[usize::from(self.len)] = n;
+            self.len += 1;
+            Some(())
+        } else {
+            None
+        }
+    }
 }
 
 struct CharStringParserContext<'a> {
     metadata: &'a Metadata<'a>,
+    coordinates: &'a [i16],
     is_first_move_to: bool,
     has_move_to: bool,
-    variation_region: u16,
+    scalars: Scalars,
     had_vsindex: bool,
     had_blend: bool,
     stems_len: u32,
 }
 
+impl CharStringParserContext<'_> {
+    fn update_scalars(&mut self, index: u16) -> Result<(), CFFError> {
+        self.scalars.clear();
+
+        let indices = self.metadata.item_variation_store.region_indices(index)
+            .ok_or(CFFError::InvalidItemVariationDataIndex)?;
+        for index in indices {
+            let scalar = self.metadata.item_variation_store.regions
+                .evaluate_region(index, self.coordinates);
+            self.scalars.push(scalar)
+                .ok_or(CFFError::BlendRegionsLimitReached)?;
+        }
+
+        Ok(())
+    }
+}
+
 fn parse_char_string(
     data: &[u8],
     metadata: &Metadata,
+    coordinates: &[i16],
     builder: &mut dyn OutlineBuilder,
 ) -> Result<Rect, CFFError> {
     let mut ctx = CharStringParserContext {
         metadata,
+        coordinates,
         is_first_move_to: true,
         has_move_to: false,
-        variation_region: metadata.variation_region,
+        scalars: Scalars::default(),
         had_vsindex: false,
         had_blend: false,
         stems_len: 0,
     };
 
+    // Load scalars at default index.
+    ctx.update_scalars(0)?;
+
     let mut inner_builder = Builder {
         builder,
-        bbox: BBox {
-            x_min: core::f32::MAX,
-            y_min: core::f32::MAX,
-            x_max: core::f32::MIN,
-            y_max: core::f32::MIN,
-        }
+        bbox: BBox::new(),
     };
 
     let mut stack = ArgumentsStack {
-        data: &mut [0.0; MAX_ARGUMENTS_STACK_LEN],
+        data: &mut [0.0; MAX_ARGUMENTS_STACK_LEN], // 2052B
         len: 0,
         max_len: MAX_ARGUMENTS_STACK_LEN,
     };
@@ -667,9 +682,9 @@ fn _parse_char_string(
                     return Err(CFFError::InvalidArgumentsStackLength);
                 }
 
-                ctx.variation_region = parse_variation_regions(
-                    ctx.metadata.item_variation_store, stack.pop() as u16, // TODO: check
-                )?;
+                let index = u16::try_num_from(stack.pop())
+                    .ok_or(CFFError::InvalidItemVariationDataIndex)?;
+                ctx.update_scalars(index)?;
 
                 ctx.had_vsindex = true;
 
@@ -682,27 +697,29 @@ fn _parse_char_string(
 
                 ctx.had_blend = true;
 
-                let n = stack.pop() as usize;
-                let k = ctx.variation_region as usize;
+                let n = u16::try_num_from(stack.pop())
+                    .ok_or(CFFError::InvalidNumberOfBlendOperands)?;
+                let k = ctx.scalars.len();
 
-                // `blend` operators can be successive.
-                // In this case we should process only the last `n * (k + 1)` values.
-                // And keep previous unchanged.
-                let len = n * (k + 1);
+                let len = usize::from(n) * (usize::from(k) + 1);
                 if stack.len() < len {
                     return Err(CFFError::InvalidArgumentsStackLength);
                 }
 
-                // Remove deltas, but keep nums.
-                stack.remove_last_n(n * k);
+                let start = stack.len() - len;
+                for i in (0..n).rev() {
+                    for j in 0..k {
+                        let delta = stack.pop();
+                        stack.data[start + usize::from(i)] += delta * ctx.scalars.at(k - j - 1);
+                    }
+                }
             }
             operator::HINT_MASK | operator::COUNTER_MASK => {
+                ctx.stems_len += stack.len() as u32 >> 1;
+                s.advance((ctx.stems_len + 7) >> 3);
+
                 // We are ignoring the hint operators.
                 stack.clear();
-
-                ctx.stems_len += stack.len() as u32 >> 1;
-
-                s.advance((ctx.stems_len + 7) >> 3);
             }
             operator::MOVE_TO => {
                 // dx1 dy1

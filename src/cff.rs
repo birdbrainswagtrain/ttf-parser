@@ -84,6 +84,8 @@ pub enum CFFError {
     MissingMoveTo,
     InvalidSubroutineIndex,
     InvalidItemVariationDataIndex,
+    InvalidNumberOfBlendOperands,
+    BlendRegionsLimitReached,
 }
 
 #[cfg(feature = "logging")]
@@ -128,6 +130,12 @@ impl core::fmt::Display for CFFError {
             }
             CFFError::InvalidItemVariationDataIndex => {
                 write!(f, "no ItemVariationData with required index")
+            }
+            CFFError::InvalidNumberOfBlendOperands => {
+                write!(f, "an invalid number of blend operands")
+            }
+            CFFError::BlendRegionsLimitReached => {
+                write!(f, "only up to 64 blend regions are supported")
             }
         }
     }
@@ -312,7 +320,7 @@ fn parse_char_string(
     };
 
     let mut stack = ArgumentsStack {
-        data: &mut [0.0; MAX_ARGUMENTS_STACK_LEN],
+        data: &mut [0.0; MAX_ARGUMENTS_STACK_LEN], // 192B
         len: 0,
         max_len: MAX_ARGUMENTS_STACK_LEN,
     };
@@ -1481,12 +1489,6 @@ impl<'a> ArgumentsStack<'a> {
         debug_assert!(!self.is_empty());
         self.len -= 1;
         self.data[self.len]
-    }
-
-    #[inline]
-    pub fn remove_last_n(&mut self, n: usize) {
-        assert!(n < self.len);
-        self.len -= n;
     }
 
     #[inline]

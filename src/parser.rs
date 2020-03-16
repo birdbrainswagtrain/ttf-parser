@@ -113,6 +113,32 @@ impl FromData for Fixed {
 }
 
 
+pub trait NumConv<T>: Sized {
+    fn num_from(_: T) -> Self;
+}
+
+impl NumConv<u32> for usize {
+    fn num_from(v: u32) -> Self {
+        v as usize
+    }
+}
+
+
+pub trait TryNumConv<T>: Sized {
+    fn try_num_from(_: T) -> Option<Self>;
+}
+
+impl TryNumConv<f32> for u16 {
+    fn try_num_from(v: f32) -> Option<Self> {
+        if v > 0.0 && v < core::u16::MAX as f32 {
+            Some(v as u16)
+        } else {
+            None
+        }
+    }
+}
+
+
 /// A u16/u32 length type used by `LazyArray`.
 pub trait ArraySize
     : core::ops::Add<Output=Self>

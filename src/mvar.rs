@@ -32,6 +32,7 @@ pub fn metrics_variation(data: &[u8], tag: Tag, coordinates: &[i16]) -> Option<f
     )
 }
 
+// TODO: merge with var_store
 pub fn parse_item_variation_store(
     outer_index: u16,
     inner_index: u16,
@@ -107,7 +108,7 @@ fn evaluate_region(
     for i in 0..axis_count {
         let record: raw::RegionAxisCoordinatesRecord = s.read()?;
         let coord = coordinates.get(usize::from(i)).cloned().unwrap_or(0);
-        let factor = evaluate_axis(&record, coord);
+        let factor = record.evaluate_axis(coord);
         if factor == 0.0 {
             return Some(0.0);
         }
@@ -116,32 +117,4 @@ fn evaluate_region(
     }
 
     Some(v)
-}
-
-fn evaluate_axis(axis: &raw::RegionAxisCoordinatesRecord, coord: i16) -> f32 {
-    let start = axis.start_coord();
-    let peak = axis.peak_coord();
-    let end = axis.end_coord();
-
-    if start > peak || peak > end {
-        return 1.0;
-    }
-
-    if start < 0 && end > 0 && peak != 0 {
-       return 1.0;
-    }
-
-    if peak == 0 || coord == peak {
-        return 1.0;
-    }
-
-    if coord <= start || end <= coord {
-        return 0.0;
-    }
-
-    if coord < peak {
-        (coord - start) as f32 / (peak - start) as f32
-    } else {
-        (end - coord) as f32 / (end - peak) as f32
-    }
 }

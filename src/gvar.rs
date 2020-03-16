@@ -111,8 +111,8 @@ pub fn outline_variable(
     loca_table: loca::Table,
     glyf_table: &[u8],
     gvar_table: &Table,
-    glyph_id: GlyphId,
     coordinates: &[i16],
+    glyph_id: GlyphId,
     builder: &mut dyn OutlineBuilder,
 ) -> Option<Rect> {
     let mut b = glyf::Builder::new(Transform::default(), Some(BBox::new()), builder);
