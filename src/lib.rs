@@ -134,14 +134,13 @@ The second one is basically a tiny language with a stack-based VM, which makes i
 The [benchmark](./benches/outline/) tests how long it takes to outline all glyphs in the font.
 
 ```text
-ttf_parser_outline_glyf     853957 ns
-freetype_outline_glyf      1250442 ns
+stb_truetype_outline_glyf     695873 ns
+ttf_parser_outline_glyf       765007 ns
+freetype_outline_glyf        1194395 ns
 
-ttf_parser_outline_gvar     984885 ns
-freetype_outline_gvar      1443903 ns
-
-ttf_parser_outline_cff     1371693 ns
-freetype_outline_cff       5856448 ns
+ttf_parser_outline_cff       1165904 ns
+stb_truetype_outline_cff     2862264 ns
+freetype_outline_cff         5806994 ns
 ```
 
 **Note:** FreeType is surprisingly slow, so I'm worried that I've messed something up.
@@ -176,7 +175,7 @@ test x_height                    ... bench:         0.2 ns/iter (+/- 0)
 `family_name` is expensive, because it allocates a `String` and the original data
 is stored as UTF-16 BE.
 
-`glyph_name_8` is faster that `glyph_name_276`, because for glyph indexes lower than 258
+`glyph_name_8` is faster than `glyph_name_276`, because for glyph indexes lower than 258
 we are using predefined names, so no parsing is involved.
 */
 

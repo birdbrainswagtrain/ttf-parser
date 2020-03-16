@@ -362,7 +362,7 @@ impl<'a, T: FromData, Idx: ArraySize> Iterator for LazyArrayIter<'a, T, Idx> {
 
     #[inline]
     fn next(&mut self) -> Option<Self::Item> {
-        self.index += Idx::ONE;
+        self.index += Idx::ONE; // TODO: check
         self.data.get(self.index - Idx::ONE)
     }
 
@@ -512,7 +512,7 @@ impl<'a> Stream<'a> {
 ///
 /// It's still not 100% guarantee, but it makes code easier to read and a bit faster.
 /// And we still backed by the Rust's bounds checking.
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Default)]
 pub struct SafeStream<'a> {
     data: &'a [u8],
     offset: usize,
@@ -529,14 +529,12 @@ impl<'a> SafeStream<'a> {
 
     #[inline]
     pub fn read<T: FromData>(&mut self) -> T {
-        T::parse(self.read_bytes(T::SIZE as u32))
-    }
+        let start = self.offset;
+        self.offset += T::SIZE;
+        let end = self.offset;
 
-    #[inline]
-    pub fn read_bytes<L: ArraySize>(&mut self, len: L) -> &'a [u8] {
-        let offset = self.offset;
-        self.offset += len.to_usize();
-        &self.data[offset..(offset + len.to_usize())]
+        let data = &self.data[start..end];
+        T::parse(data)
     }
 }
 

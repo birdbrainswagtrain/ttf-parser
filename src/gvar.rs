@@ -118,7 +118,7 @@ pub fn outline_variable(
     let mut b = glyf::Builder::new(Transform::default(), Some(BBox::new()), builder);
     let range = loca_table.glyph_range(glyph_id)?;
     let glyph_data = glyf_table.get(range)?;
-    outline_var_impl(loca_table, glyph_data, gvar_table,
+    outline_var_impl(loca_table, glyf_table, gvar_table,
                      glyph_id, glyph_data, coordinates, 0, &mut b);
     b.bbox.and_then(|bbox| bbox.to_rect())
 }
@@ -192,12 +192,12 @@ fn outline_var_impl(
             transform = Transform::combine(transform, component.transform);
 
             let mut b = glyf::Builder::new(transform, builder.bbox, builder.builder);
-            let range = loca_table.glyph_range(glyph_id)?;
+            let range = loca_table.glyph_range(component.glyph_id)?;
             let glyph_data = glyf_table.get(range)?;
             outline_var_impl(
                 loca_table, glyf_table, gvar_table, component.glyph_id,
                 glyph_data, coordinates, depth + 1, &mut b,
-            ).unwrap();
+            )?;
 
             // Take updated bbox.
             builder.bbox = b.bbox;
@@ -307,8 +307,8 @@ impl<'a> VariationTuples<'a> {
 
     fn apply(
         &mut self,
-        all_points: glyf::GlyphPoints,
-        points: glyf::GlyphPoints,
+        all_points: glyf::GlyphPointsIter,
+        points: glyf::GlyphPointsIter,
         point: glyf::GlyphPoint,
     ) -> Option<(f32, f32)> {
         let mut x = f32::from(point.x);
@@ -963,12 +963,12 @@ fn infer_deltas(
     tuple: &VariationTuple,
     points_set: SetPointsIter,
     // A points iterator that starts after the current point.
-    points: glyf::GlyphPoints,
+    points: glyf::GlyphPointsIter,
     // A points iterator that starts from the first point in the glyph.
-    all_points: glyf::GlyphPoints,
+    all_points: glyf::GlyphPointsIter,
     curr_point: glyf::GlyphPoint,
 ) -> (f32, f32) {
-    let mut current_contour = points.current_contour;
+    let mut current_contour = points.current_contour();
     if curr_point.last_point && current_contour != 0 {
         // When we parsed the last point of a contour,
         // an iterator had switched to the next contour.
@@ -1053,7 +1053,7 @@ fn infer_deltas(
                     let _ = deltas.next();
                 }
 
-                contour = all_points.current_contour;
+                contour = all_points.current_contour();
                 continue;
             }
 
