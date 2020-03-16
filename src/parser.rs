@@ -80,13 +80,17 @@ impl FromData for U24 {
 }
 
 
-// https://docs.microsoft.com/en-us/typography/opentype/spec/otff#data-types
-#[derive(Clone, Copy, Debug)]
+/// 16-bit signed fixed number with the low 14 bits of fraction (2.14).
+///
+/// https://docs.microsoft.com/en-us/typography/opentype/spec/otff#data-types
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub struct F2DOT14(pub i16);
 
 impl F2DOT14 {
+    /// Converts i16 to f32.
     #[inline]
-    pub fn to_float(&self) -> f32 {
+    pub fn to_f32(&self) -> f32 {
         self.0 as f32 / 16384.0
     }
 }

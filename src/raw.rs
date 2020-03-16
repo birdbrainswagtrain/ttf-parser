@@ -876,6 +876,46 @@ pub mod gsubgpos {
     }
 }
 
+pub mod avar {
+    use crate::parser::FromData;
+
+    #[derive(Clone, Copy)]
+    pub struct AxisValueMapRecord {
+        data: [u8; 4],
+    }
+
+    impl AxisValueMapRecord {
+        #[allow(dead_code)]
+        pub const SIZE: usize = 4;
+
+        #[inline(always)]
+        pub fn new(input: &[u8]) -> Self {
+            let mut data = [0u8; Self::SIZE];
+            data.clone_from_slice(input);
+            AxisValueMapRecord { data }
+        }
+
+        #[inline(always)]
+        pub fn from_coordinate(&self) -> i16 {
+            i16::from_be_bytes([self.data[0], self.data[1]])
+        }
+
+        #[inline(always)]
+        pub fn to_coordinate(&self) -> i16 {
+            i16::from_be_bytes([self.data[2], self.data[3]])
+        }
+    }
+
+    impl FromData for AxisValueMapRecord {
+        const SIZE: usize = AxisValueMapRecord::SIZE;
+
+        #[inline]
+        fn parse(data: &[u8]) -> Self {
+            Self::new(data)
+        }
+    }
+}
+
 pub mod fvar {
     use crate::parser::FromData;
     use crate::Tag;

@@ -2,9 +2,10 @@
 
 use core::convert::TryFrom;
 
-use crate::parser::{Stream, SafeStream, LazyArray16, FromData};
+use crate::parser::{Stream, LazyArray16, F2DOT14};
+use crate::raw::avar as raw;
 
-pub fn map_variation_coordinates(data: &[u8], coordinates: &mut [i16]) -> Option<()> {
+pub fn map_variation_coordinates(data: &[u8], coordinates: &mut [F2DOT14]) -> Option<()> {
     let mut s = Stream::new(data);
 
     let version: u32 = s.read()?;
@@ -20,49 +21,30 @@ pub fn map_variation_coordinates(data: &[u8], coordinates: &mut [i16]) -> Option
     }
 
     for i in 0..axis_count {
-        let map = s.read_array16::<AxisValueMapRecord>()?;
-        coordinates[i] = map_value(&map, coordinates[i]);
+        let map = s.read_array16::<raw::AxisValueMapRecord>()?;
+        coordinates[i] = F2DOT14(map_value(&map, coordinates[i].0));
     }
 
     Some(())
 }
 
-#[derive(Clone, Copy)]
-struct AxisValueMapRecord {
-    from_coordinate: i16,
-    to_coordinate: i16,
-}
-
-impl FromData for AxisValueMapRecord {
-    const SIZE: usize = 4;
-
-    #[inline]
-    fn parse(data: &[u8]) -> Self {
-        let mut s = SafeStream::new(data);
-        AxisValueMapRecord {
-            from_coordinate: s.read(),
-            to_coordinate: s.read(),
-        }
-    }
-}
-
-fn map_value(map: &LazyArray16<AxisValueMapRecord>, value: i16) -> i16 {
+fn map_value(map: &LazyArray16<raw::AxisValueMapRecord>, value: i16) -> i16 {
     // This code is based on harfbuzz implementation.
 
     if map.len() == 0 {
         return value;
     } else if map.len() == 1 {
         let record = map.at(0);
-        return value - record.from_coordinate + record.to_coordinate;
+        return value - record.from_coordinate() + record.to_coordinate();
     }
 
     let record_0 = map.at(0);
-    if value <= record_0.from_coordinate {
-        return value - record_0.from_coordinate + record_0.to_coordinate;
+    if value <= record_0.from_coordinate() {
+        return value - record_0.from_coordinate() + record_0.to_coordinate();
     }
 
     let mut i = 1;
-    while i < map.len() && value > map.at(i).from_coordinate {
+    while i < map.len() && value > map.at(i).from_coordinate() {
         i += 1;
     }
 
@@ -71,18 +53,18 @@ fn map_value(map: &LazyArray16<AxisValueMapRecord>, value: i16) -> i16 {
     }
 
     let record_i = map.at(i);
-    if value >= record_i.from_coordinate {
-        return value - record_i.from_coordinate + record_i.to_coordinate;
+    if value >= record_i.from_coordinate() {
+        return value - record_i.from_coordinate() + record_i.to_coordinate();
     }
 
     let record_prev = map.at(i - 1);
-    if record_prev.from_coordinate == record_i.from_coordinate {
-        return record_prev.to_coordinate;
+    if record_prev.from_coordinate() == record_i.from_coordinate() {
+        return record_prev.to_coordinate();
     }
 
-    let denom = record_i.from_coordinate as i32 - record_prev.from_coordinate as i32;
-    let value = record_prev.to_coordinate as i32 +
-        ((record_i.to_coordinate as i32 - record_prev.to_coordinate as i32) *
-            (value as i32 - record_prev.from_coordinate as i32) + denom / 2) / denom;
+    let denom = record_i.from_coordinate() as i32 - record_prev.from_coordinate() as i32;
+    let value = record_prev.to_coordinate() as i32 +
+        ((record_i.to_coordinate() as i32 - record_prev.to_coordinate() as i32) *
+            (value as i32 - record_prev.from_coordinate() as i32) + denom / 2) / denom;
     i16::try_from(value).unwrap_or(0)
 }

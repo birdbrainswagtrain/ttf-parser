@@ -449,6 +449,12 @@ GDEF_RANGE_RECORD = [
     TableRow(False, TtfUInt16(),                'startCoverageIndex'),
 ]
 
+# https://docs.microsoft.com/en-us/typography/opentype/spec/avar#table-formats
+AVAR_AXIS_VALUE_MAP_RECORD = [
+    TableRow(True,  TtfInt16(), 'fromCoordinate'),  # Actually F2DOT14.
+    TableRow(True,  TtfInt16(), 'toCoordinate'),    #
+]
+
 # https://docs.microsoft.com/en-us/typography/opentype/spec/fvar#variationaxisrecord
 FVAR_VARIATION_AXIS_RECORD = [
     TableRow(True,  TtfTag(),       'axisTag'),
@@ -716,6 +722,12 @@ print()
 generate_table(GSUB_GPOS_CONDITION_TABLE, 'Condition', owned=True, impl_from_data=True)
 print()
 generate_table(GSUB_GPOS_FEATURE_VARIATION_RECORD, 'FeatureVariationRecord', owned=True, impl_from_data=True)
+print('}')
+print()
+print('pub mod avar {')
+print('use crate::parser::FromData;')
+print()
+generate_table(AVAR_AXIS_VALUE_MAP_RECORD, 'AxisValueMapRecord', owned=True, impl_from_data=True)
 print('}')
 print()
 print('pub mod fvar {')

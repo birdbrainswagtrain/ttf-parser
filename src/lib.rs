@@ -260,7 +260,7 @@ pub use gpos::PositioningTable;
 pub use gsub::SubstitutionTable;
 pub use name::*;
 pub use os2::*;
-pub use parser::{FromData, ArraySize, LazyArray, LazyArray16, LazyArray32, LazyArrayIter};
+pub use parser::{F2DOT14, FromData, ArraySize, LazyArray, LazyArray16, LazyArray32, LazyArrayIter};
 
 
 /// A type-safe wrapper for glyph ID.
@@ -1038,13 +1038,10 @@ impl<'a> Font<'a> {
     /// Parses metrics variation offset using
     /// [Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/mvar).
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
     ///
     /// Returns `None` when `MVAR` table is not present or invalid.
-    pub fn metrics_variation(&self, tag: Tag, coordinates: &[i16]) -> Option<f32> {
+    pub fn metrics_variation(&self, tag: Tag, coordinates: &[F2DOT14]) -> Option<f32> {
         mvar::metrics_variation(self.mvar?, tag, coordinates)
     }
 
@@ -1067,12 +1064,9 @@ impl<'a> Font<'a> {
     /// Performs normalization mapping to variation coordinates
     /// using [Axis Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/avar).
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
     #[inline]
-    pub fn map_variation_coordinates(&self, coordinates: &mut [i16]) -> Option<()> {
+    pub fn map_variation_coordinates(&self, coordinates: &mut [F2DOT14]) -> Option<()> {
         avar::map_variation_coordinates(self.avar?, coordinates)
     }
 
@@ -1108,16 +1102,13 @@ impl<'a> Font<'a> {
     /// Parses glyph's variation offset for horizontal advance using
     /// [Horizontal Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hvar).
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
     ///
     /// Returns `None` when `HVAR` table is not present or invalid.
     pub fn glyph_hor_advance_variation(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i16],
+        coordinates: &[F2DOT14],
     ) -> Option<f32> {
         hvar::glyph_advance_variation(self.hvar?, glyph_id, coordinates)
     }
@@ -1132,16 +1123,13 @@ impl<'a> Font<'a> {
     /// Parses glyph's variation offset for horizontal side bearing using
     /// [Horizontal Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hvar).
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
     ///
     /// Returns `None` when `HVAR` table is not present or invalid.
     pub fn glyph_hor_side_bearing_variation(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i16],
+        coordinates: &[F2DOT14],
     ) -> Option<f32> {
         hvar::glyph_side_bearing_variation(self.hvar?, glyph_id, coordinates)
     }
@@ -1156,16 +1144,13 @@ impl<'a> Font<'a> {
     /// Parses glyph's variation offset for vertical advance using
     /// [Vertical Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vvar).
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
     ///
     /// Returns `None` when `VVAR` table is not present or invalid.
     pub fn glyph_ver_advance_variation(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i16],
+        coordinates: &[F2DOT14],
     ) -> Option<f32> {
         crate::hvar::glyph_advance_variation(self.vvar?, glyph_id, coordinates)
     }
@@ -1180,16 +1165,13 @@ impl<'a> Font<'a> {
     /// Parses glyph's variation offset for vertical side bearing using
     /// [Vertical Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vvar).
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
     ///
     /// Returns `None` when `VVAR` table is not present or invalid.
     pub fn glyph_ver_side_bearing_variation(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i16],
+        coordinates: &[F2DOT14],
     ) -> Option<f32> {
         crate::hvar::glyph_side_bearing_variation(self.vvar?, glyph_id, coordinates)
     }
@@ -1269,9 +1251,9 @@ impl<'a> Font<'a> {
     /// You must check `outline_glyph()` result before using
     /// `OutlineBuilder`'s output.
     ///
-    /// This method supports `glyf`, `gvar`, `CFF` and `CFF2` tables.
+    /// This method supports `glyf` and `CFF` tables.
     ///
-    /// Returns `None` when glyph has no outline.
+    /// Returns `None` when glyph has no outline or on error.
     ///
     /// # Example
     ///
@@ -1324,18 +1306,10 @@ impl<'a> Font<'a> {
             return cff::outline(metadata, glyph_id, builder);
         }
 
-        // TODO: use default coords
-        // if let Some(ref metadata) = self.cff2 {
-        //     return cff2::outline(metadata, glyph_id, builder);
-        // }
-
         None
     }
 
     /// Outlines a variable glyph and returns its tight bounding box.
-    ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
     ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
     ///
@@ -1344,14 +1318,15 @@ impl<'a> Font<'a> {
     /// You must check `outline_variable_glyph()` result before using
     /// `OutlineBuilder`'s output.
     ///
-    /// This method supports `glyf` + `gvar` and `CFF2` tables.
+    /// This method supports `glyf`+`gvar` and `CFF2` tables.
     ///
-    /// Returns `None` when glyph has no outline or when font is not variable.
+    /// Returns `None` when glyph has no outline, when font is not variable
+    /// or on error.
     #[inline]
     pub fn outline_variable_glyph(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i16],
+        coordinates: &[F2DOT14],
         builder: &mut dyn OutlineBuilder,
     ) -> Option<Rect> {
         if let Some(ref gvar_table) = self.gvar {
@@ -1400,7 +1375,7 @@ impl<'a> Font<'a> {
     pub fn variable_glyph_bounding_box(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[i16],
+        coordinates: &[F2DOT14],
     ) -> Option<Rect> {
         if self.gvar.is_some() {
             return gvar::outline(self.loca?, self.glyf?, self.gvar.as_ref()?,

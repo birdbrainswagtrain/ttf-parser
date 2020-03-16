@@ -2,7 +2,7 @@
 //!
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#item-variation-store
 
-use crate::parser::{Stream, LazyArray16};
+use crate::parser::{Stream, LazyArray16, F2DOT14};
 
 #[derive(Clone, Copy)]
 pub struct VariationRegionList<'a> {
@@ -14,7 +14,7 @@ impl<'a> VariationRegionList<'a> {
     pub fn evaluate_region(
         &self,
         index: u16,
-        coordinates: &[i16],
+        coordinates: &[F2DOT14],
     ) -> f32 {
         let mut v = 1.0;
         for (i, coord) in coordinates.iter().enumerate() {
@@ -36,7 +36,9 @@ impl<'a> VariationRegionList<'a> {
 }
 
 impl crate::raw::mvar::RegionAxisCoordinatesRecord {
-    pub fn evaluate_axis(&self, coord: i16) -> f32 {
+    pub fn evaluate_axis(&self, coord: F2DOT14) -> f32 {
+        let coord = coord.0;
+
         let start = self.start_coord();
         let peak = self.peak_coord();
         let end = self.end_coord();
