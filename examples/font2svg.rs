@@ -146,10 +146,6 @@ fn process(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     let mut row = 0;
     let mut column = 0;
     for id in 0..font.number_of_glyphs() {
-        // if id != 36 {
-        //     continue;
-        // }
-
         glyph_to_path(
             column as f64 * cell_size,
             row as f64 * cell_size,

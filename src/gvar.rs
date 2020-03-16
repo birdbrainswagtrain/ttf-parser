@@ -107,7 +107,7 @@ impl<'a> Table<'a> {
 }
 
 
-pub fn outline_variable(
+pub fn outline(
     loca_table: loca::Table,
     glyf_table: &[u8],
     gvar_table: &Table,
@@ -301,6 +301,7 @@ struct VariationTuples<'a> {
 }
 
 impl<'a> VariationTuples<'a> {
+    #[inline]
     fn as_mut_slice(&mut self) -> &mut [VariationTuple<'a>] {
         &mut self.headers[0..usize::from(self.len)]
     }
@@ -363,6 +364,7 @@ impl<'a> VariationTuples<'a> {
     // This is just like `apply()`, but without `infer_deltas`,
     // since we use it only for component points and not a contour.
     // And since there are no contour and no points, `infer_deltas()` will do nothing.
+    #[inline]
     fn apply_null(&mut self) -> Option<(f32, f32)> {
         let mut x = 0.0;
         let mut y = 0.0;
@@ -465,6 +467,7 @@ fn parse_variation_tuples<'a>(
 }
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuplevariationheader
+#[inline]
 fn parse_tuple_variation_header(
     coordinates: &[i16],
     shared_tuple_records: &LazyArray16<F2DOT14>,
@@ -596,6 +599,7 @@ mod packed_points {
     }
 
     impl<'a> PackedPointsIter<'a> {
+        #[inline]
         pub fn new<'b>(s: &'b mut Stream<'a>) -> Option<Option<Self>> {
             // The total amount of points can be set as one or two bytes
             // depending on the first bit.
@@ -656,6 +660,7 @@ mod packed_points {
     impl<'a> Iterator for PackedPointsIter<'a> {
         type Item = u16;
 
+        #[inline]
         fn next(&mut self) -> Option<Self::Item> {
             if self.offset >= self.data.len() as u16 {
                 return None;
@@ -716,11 +721,13 @@ mod packed_points {
     }
 
     impl<'a> SetPointsIter<'a> {
+        #[inline]
         pub fn new(mut iter: PackedPointsIter<'a>) -> Self {
             let unref_count = iter.next().unwrap_or(0);
             SetPointsIter { iter, unref_count }
         }
 
+        #[inline]
         pub fn restart(self) -> Self {
             let mut iter = self.iter.clone();
             iter.offset = 0;
@@ -735,6 +742,7 @@ mod packed_points {
     impl<'a> Iterator for SetPointsIter<'a> {
         type Item = bool;
 
+        #[inline]
         fn next(&mut self) -> Option<Self::Item> {
             if self.unref_count != 0 {
                 self.unref_count -= 1;
@@ -825,6 +833,7 @@ mod packed_deltas {
     }
 
     impl RunState {
+        #[inline]
         fn next(&mut self, data: &[u8], scalar: f32) -> Option<f32> {
             if self.state == State::Control {
                 if self.data_offset == data.len() as u16 {
@@ -1090,6 +1099,7 @@ fn infer_deltas(
     (dx, dy)
 }
 
+#[inline]
 fn infer_delta(
     prev_point: i16,
     target_point: i16,

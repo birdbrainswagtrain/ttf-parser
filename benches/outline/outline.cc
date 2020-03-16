@@ -6,6 +6,7 @@
 #include <ft2build.h>
 #include FT_FREETYPE_H
 #include FT_OUTLINE_H
+#include FT_MULTIPLE_MASTERS_H
 
 #include <ttfparser.h>
 
@@ -77,6 +78,14 @@ public:
     uint16_t numberOfGlyphs() const
     {
         return (uint16_t)m_face->num_glyphs;
+    }
+
+    void setVariations()
+    {
+        FT_Fixed coords[1] = {500 * 65536L};
+        if (FT_Set_Var_Design_Coordinates(m_face, 1, coords)) {
+            throw "failed to set veriations";
+        }
     }
 
     uint32_t outline(const uint16_t gid) const
@@ -225,6 +234,25 @@ public:
         return outliner.counter;
     }
 
+    uint32_t outlineVariable(const uint16_t gid) const
+    {
+        Outliner outliner;
+
+        ttfp_outline_builder builder;
+        builder.move_to = outliner.moveToFn;
+        builder.line_to = outliner.lineToFn;
+        builder.quad_to = outliner.quadToFn;
+        builder.curve_to = outliner.curveToFn;
+        builder.close_path = outliner.closePathFn;
+
+        int16_t coords[1] = {7930};
+
+        ttfp_bbox bbox;
+        ttfp_outline_variable_glyph(m_font, builder, &outliner, gid, coords, 1, &bbox);
+
+        return outliner.counter;
+    }
+
 private:
     std::vector<char> m_fontData;
     ttfp_font *m_font = nullptr;
@@ -245,6 +273,7 @@ BENCHMARK(freetype_outline_glyf);
 static void freetype_outline_gvar(benchmark::State &state)
 {
     FT::Font font("../fonts/SourceSansVariable-Roman.ttf", 0);
+    font.setVariations();
     for (auto _ : state) {
         for (uint i = 0; i < font.numberOfGlyphs(); i++) {
             font.outline(i);
@@ -263,6 +292,18 @@ static void freetype_outline_cff(benchmark::State &state)
     }
 }
 BENCHMARK(freetype_outline_cff);
+
+static void freetype_outline_cff2(benchmark::State &state)
+{
+    FT::Font font("../fonts/SourceSansVariable-Roman.otf", 0);
+    font.setVariations();
+    for (auto _ : state) {
+        for (uint i = 0; i < font.numberOfGlyphs(); i++) {
+            font.outline(i);
+        }
+    }
+}
+BENCHMARK(freetype_outline_cff2);
 
 static void stb_truetype_outline_glyf(benchmark::State &state)
 {
@@ -306,7 +347,7 @@ static void ttf_parser_outline_gvar(benchmark::State &state)
     const auto numberOfGlyphs = font.numberOfGlyphs();
     for (auto _ : state) {
         for (uint i = 0; i < numberOfGlyphs; i++) {
-            font.outline(i);
+            font.outlineVariable(i);
         }
     }
 }
@@ -323,5 +364,17 @@ static void ttf_parser_outline_cff(benchmark::State &state)
     }
 }
 BENCHMARK(ttf_parser_outline_cff);
+
+static void ttf_parser_outline_cff2(benchmark::State &state)
+{
+    TTFP::Font font("../fonts/SourceSansVariable-Roman.otf", 0);
+    const auto numberOfGlyphs = font.numberOfGlyphs();
+    for (auto _ : state) {
+        for (uint i = 0; i < numberOfGlyphs; i++) {
+            font.outlineVariable(i);
+        }
+    }
+}
+BENCHMARK(ttf_parser_outline_cff2);
 
 BENCHMARK_MAIN();

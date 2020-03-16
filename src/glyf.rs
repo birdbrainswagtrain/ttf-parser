@@ -301,7 +301,7 @@ pub struct GlyphPointsIter<'a> {
 impl GlyphPointsIter<'_> {
     #[inline]
     pub fn current_contour(&self) -> u16 {
-        self.endpoints.index
+        self.endpoints.index - 1
     }
 }
 
@@ -356,9 +356,11 @@ impl<'a> EndpointsIter<'a> {
                 // so we have to use checked_sub.
                 self.left = end.checked_sub(prev).unwrap_or(0);
                 self.left = self.left.checked_sub(1).unwrap_or(0);
-                if let Some(n) = self.index.checked_add(1) {
-                    self.index = n;
-                }
+            }
+
+            // Always advance the index, so we can check the current contour number.
+            if let Some(n) = self.index.checked_add(1) {
+                self.index = n;
             }
 
             true

@@ -164,7 +164,7 @@ void FreeTypeFont::setVariations(const QVector<Variation> &variations)
 
     QVector<FT_Fixed> ftCoords;
 
-    for (const auto var : variations) {
+    for (const auto &var : variations) {
         ftCoords << var.value * MULTIPLIER_FT;
     }
 

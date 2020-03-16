@@ -1349,8 +1349,8 @@ impl<'a> Font<'a> {
         builder: &mut dyn OutlineBuilder,
     ) -> Option<Rect> {
         if let Some(ref gvar_table) = self.gvar {
-            return gvar::outline_variable(self.loca?, self.glyf?, gvar_table,
-                                          coordinates, glyph_id, builder);
+            return gvar::outline(self.loca?, self.glyf?, gvar_table,
+                                 coordinates, glyph_id, builder);
         }
 
         if let Some(ref metadata) = self.cff2 {
@@ -1397,8 +1397,8 @@ impl<'a> Font<'a> {
         coordinates: &[i16],
     ) -> Option<Rect> {
         if self.gvar.is_some() {
-            return gvar::outline_variable(self.loca?, self.glyf?, self.gvar.as_ref()?,
-                                          coordinates, glyph_id, &mut DummyOutline);
+            return gvar::outline(self.loca?, self.glyf?, self.gvar.as_ref()?,
+                                 coordinates, glyph_id, &mut DummyOutline);
         }
 
         if let Some(ref metadata) = self.cff2 {
