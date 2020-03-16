@@ -4,7 +4,7 @@
 
 use core::num::NonZeroU16;
 
-use crate::parser::{Stream, SafeStream, F2DOT14, LazyArray16};
+use crate::parser::{Stream, SafeStream, F2DOT14, LazyArray16, f32_bound};
 use crate::{loca, GlyphId, OutlineBuilder, Rect, BBox};
 
 pub(crate) struct Builder<'a> {
@@ -491,21 +491,6 @@ impl CompositeGlyphFlags {
     #[inline] pub fn we_have_a_two_by_two(self) -> bool { self.0 & 0x0080 != 0 }
 }
 
-
-#[inline]
-fn f32_bound(min: f32, val: f32, max: f32) -> f32 {
-    debug_assert!(min.is_finite());
-    debug_assert!(val.is_finite());
-    debug_assert!(max.is_finite());
-
-    if val > max {
-        return max;
-    } else if val < min {
-        return min;
-    }
-
-    val
-}
 
 // It's not defined in the spec, so we are using our own value.
 pub const MAX_COMPONENTS: u8 = 32;

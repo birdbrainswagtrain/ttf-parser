@@ -132,6 +132,16 @@ pub trait TryNumConv<T>: Sized {
     fn try_num_from(_: T) -> Option<Self>;
 }
 
+impl TryNumConv<f32> for i16 {
+    fn try_num_from(v: f32) -> Option<Self> {
+        if v > core::i16::MIN as f32 && v < core::i16::MAX as f32 {
+            Some(v as i16)
+        } else {
+            None
+        }
+    }
+}
+
 impl TryNumConv<f32> for u16 {
     fn try_num_from(v: f32) -> Option<Self> {
         if v > 0.0 && v < core::u16::MAX as f32 {
@@ -673,4 +683,25 @@ impl<'a, T: Offset + FromData> Iterator for OffsetsIter<'a, T> {
             None
         }
     }
+}
+
+#[inline]
+pub fn i16_bound(min: i16, val: i16, max: i16) -> i16 {
+    use core::cmp;
+    cmp::max(min, cmp::min(max, val))
+}
+
+#[inline]
+pub fn f32_bound(min: f32, val: f32, max: f32) -> f32 {
+    debug_assert!(min.is_finite());
+    debug_assert!(val.is_finite());
+    debug_assert!(max.is_finite());
+
+    if val > max {
+        return max;
+    } else if val < min {
+        return min;
+    }
+
+    val
 }

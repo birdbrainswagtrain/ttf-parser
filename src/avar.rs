@@ -2,10 +2,11 @@
 
 use core::convert::TryFrom;
 
-use crate::parser::{Stream, LazyArray16, F2DOT14};
+use crate::NormalizedCoord;
+use crate::parser::{Stream, LazyArray16};
 use crate::raw::avar as raw;
 
-pub fn map_variation_coordinates(data: &[u8], coordinates: &mut [F2DOT14]) -> Option<()> {
+pub fn map_variation_coordinates(data: &[u8], coordinates: &mut [NormalizedCoord]) -> Option<()> {
     let mut s = Stream::new(data);
 
     let version: u32 = s.read()?;
@@ -22,7 +23,7 @@ pub fn map_variation_coordinates(data: &[u8], coordinates: &mut [F2DOT14]) -> Op
 
     for i in 0..axis_count {
         let map = s.read_array16::<raw::AxisValueMapRecord>()?;
-        coordinates[i] = F2DOT14(map_value(&map, coordinates[i].0));
+        coordinates[i] = NormalizedCoord::from(map_value(&map, coordinates[i].0));
     }
 
     Some(())

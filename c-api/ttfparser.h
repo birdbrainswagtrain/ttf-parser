@@ -431,7 +431,7 @@ uint16_t ttfp_get_number_of_glyphs(const ttfp_font *font);
  * You must check #ttfp_outline_glyph result for error before using
  * #ttfp_outline_builder's output.
  *
- * This method supports \b glyf and \b CFF tables.
+ * This method supports \b glyf, \b CFF and \b CFF2 tables.
  */
 bool ttfp_outline_glyph(const ttfp_font *font,
                         ttfp_outline_builder builder,
@@ -439,12 +439,13 @@ bool ttfp_outline_glyph(const ttfp_font *font,
                         uint16_t glyph_id,
                         ttfp_bbox *bbox);
 
-/** Outlines a variable glyph and returns its tight bounding box.
+/**
+ * @brief Outlines a variable glyph and returns its tight bounding box.
  *
- * Note: coordinates should be converted from fixed point 2.14 to int16_t
- * by multiplying each coordinate by 16384.
+ * \b coordinates should be represented in a -1.0..1.0 range using fixed point 2.14.
+ * i.e. the float value should be multiplied by 16384.
  *
- * Number of `coordinates` should be the same as number of variation axes in the font.
+ * Number of \b coordinates should be the same as the number of variation axes in the font.
  *
  * \b Warning: since \b ttf-parser is a pull parser,
  * #ttfp_outline_builder will emit segments even when outline is partially malformed.

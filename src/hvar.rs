@@ -1,7 +1,7 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/hvar
 
-use crate::GlyphId;
-use crate::parser::{Stream, Offset, Offset32, F2DOT14};
+use crate::{GlyphId, NormalizedCoord};
+use crate::parser::{Stream, Offset, Offset32};
 
 pub struct DeltaSetIndexMap<'a> {
     data: &'a [u8],
@@ -47,7 +47,7 @@ impl<'a> DeltaSetIndexMap<'a> {
 pub fn glyph_advance_variation(
     data: &[u8], // HVAR or VVAR
     glyph_id: GlyphId,
-    coordinates: &[F2DOT14],
+    coordinates: &[NormalizedCoord],
 ) -> Option<f32> {
     let mut s = Stream::new(data);
 
@@ -74,7 +74,7 @@ pub fn glyph_advance_variation(
 pub fn glyph_side_bearing_variation(
     data: &[u8], // HVAR or VVAR
     glyph_id: GlyphId,
-    coordinates: &[F2DOT14],
+    coordinates: &[NormalizedCoord],
 ) -> Option<f32> {
     let mut s = Stream::new(data);
 

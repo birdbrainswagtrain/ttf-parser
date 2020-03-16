@@ -1,11 +1,11 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/mvar
 
-use crate::Tag;
-use crate::parser::{Stream, Offset, Offset16, Offset32, F2DOT14};
+use crate::{Tag, NormalizedCoord};
+use crate::parser::{Stream, Offset, Offset16, Offset32};
 use crate::raw::mvar as raw;
 
 
-pub fn metrics_variation(data: &[u8], tag: Tag, coordinates: &[F2DOT14]) -> Option<f32> {
+pub fn metrics_variation(data: &[u8], tag: Tag, coordinates: &[NormalizedCoord]) -> Option<f32> {
     let mut s = Stream::new(data);
 
     let version: u32 = s.read()?;
@@ -36,7 +36,7 @@ pub fn metrics_variation(data: &[u8], tag: Tag, coordinates: &[F2DOT14]) -> Opti
 pub fn parse_item_variation_store(
     outer_index: u16,
     inner_index: u16,
-    coordinates: &[F2DOT14],
+    coordinates: &[NormalizedCoord],
     s: &mut Stream,
 ) -> Option<f32> {
     let orig = s.clone();
@@ -61,7 +61,7 @@ pub fn parse_item_variation_store(
 
 fn parse_item_variation_data(
     inner_index: u16,
-    coordinates: &[F2DOT14],
+    coordinates: &[NormalizedCoord],
     s: &mut Stream,
     region_s: Stream,
 ) -> Option<f32> {
@@ -95,7 +95,7 @@ fn parse_item_variation_data(
 
 fn evaluate_region(
     index: u16,
-    coordinates: &[F2DOT14],
+    coordinates: &[NormalizedCoord],
     mut s: Stream,
 ) -> Option<f32> {
     let axis_count: u16 = s.read()?;
@@ -107,8 +107,8 @@ fn evaluate_region(
     let mut v = 1.0;
     for i in 0..axis_count {
         let record: raw::RegionAxisCoordinatesRecord = s.read()?;
-        let coord = coordinates.get(usize::from(i)).cloned().unwrap_or(F2DOT14(0));
-        let factor = record.evaluate_axis(coord);
+        let coord = coordinates.get(usize::from(i)).cloned().unwrap_or_default();
+        let factor = record.evaluate_axis(coord.get());
         if factor == 0.0 {
             return Some(0.0);
         }

@@ -252,7 +252,7 @@ mod var_store;
 #[cfg(feature = "std")]
 mod writer;
 
-use parser::{Stream, SafeStream, Offset};
+use parser::{Stream, SafeStream, Offset, i16_bound, f32_bound};
 pub use fvar::{VariationAxes, VariationAxis};
 pub use gdef::GlyphClass;
 pub use ggg::*;
@@ -260,7 +260,7 @@ pub use gpos::PositioningTable;
 pub use gsub::SubstitutionTable;
 pub use name::*;
 pub use os2::*;
-pub use parser::{F2DOT14, FromData, ArraySize, LazyArray, LazyArray16, LazyArray32, LazyArrayIter};
+pub use parser::{FromData, ArraySize, LazyArray, LazyArray16, LazyArray32, LazyArrayIter};
 
 
 /// A type-safe wrapper for glyph ID.
@@ -279,6 +279,51 @@ impl FromData for GlyphId {
 impl Default for GlyphId {
     fn default() -> Self {
         GlyphId(0)
+    }
+}
+
+
+/// A variation coordinate in a normalized coordinate system.
+///
+/// Basically any number in a -1.0..1.0 range.
+/// Where 0 is a default value.
+///
+/// The number is stored as f2.16
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Default, Debug)]
+pub struct NormalizedCoord(i16);
+
+impl From<i16> for NormalizedCoord {
+    /// Creates a new coordinate.
+    ///
+    /// The provided number will be clamped to the -16384..16384 range.
+    #[inline]
+    fn from(n: i16) -> Self {
+        NormalizedCoord(i16_bound(-16384, n, 16384))
+    }
+}
+
+impl From<f32> for NormalizedCoord {
+    /// Creates a new coordinate.
+    ///
+    /// The provided number will be clamped to the -1.0..1.0 range.
+    #[inline]
+    fn from(n: f32) -> Self {
+        NormalizedCoord((f32_bound(-1.0, n, 1.0) * 16384.0) as i16)
+    }
+}
+
+impl NormalizedCoord {
+    /// Returns the coordinate value as f2.14.
+    #[inline]
+    pub fn get(self) -> i16 {
+        self.0
+    }
+
+    /// Returns the coordinate value as `f32`.
+    #[inline]
+    pub fn get_fixed(self) -> f32 {
+        self.0 as f32 / 16384.0
     }
 }
 
@@ -1041,7 +1086,7 @@ impl<'a> Font<'a> {
     /// Number of `coordinates` should be the same as number of variation axes in the font.
     ///
     /// Returns `None` when `MVAR` table is not present or invalid.
-    pub fn metrics_variation(&self, tag: Tag, coordinates: &[F2DOT14]) -> Option<f32> {
+    pub fn metrics_variation(&self, tag: Tag, coordinates: &[NormalizedCoord]) -> Option<f32> {
         mvar::metrics_variation(self.mvar?, tag, coordinates)
     }
 
@@ -1064,9 +1109,9 @@ impl<'a> Font<'a> {
     /// Performs normalization mapping to variation coordinates
     /// using [Axis Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/avar).
     ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
+    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
     #[inline]
-    pub fn map_variation_coordinates(&self, coordinates: &mut [F2DOT14]) -> Option<()> {
+    pub fn map_variation_coordinates(&self, coordinates: &mut [NormalizedCoord]) -> Option<()> {
         avar::map_variation_coordinates(self.avar?, coordinates)
     }
 
@@ -1108,7 +1153,7 @@ impl<'a> Font<'a> {
     pub fn glyph_hor_advance_variation(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[F2DOT14],
+        coordinates: &[NormalizedCoord],
     ) -> Option<f32> {
         hvar::glyph_advance_variation(self.hvar?, glyph_id, coordinates)
     }
@@ -1129,7 +1174,7 @@ impl<'a> Font<'a> {
     pub fn glyph_hor_side_bearing_variation(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[F2DOT14],
+        coordinates: &[NormalizedCoord],
     ) -> Option<f32> {
         hvar::glyph_side_bearing_variation(self.hvar?, glyph_id, coordinates)
     }
@@ -1150,7 +1195,7 @@ impl<'a> Font<'a> {
     pub fn glyph_ver_advance_variation(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[F2DOT14],
+        coordinates: &[NormalizedCoord],
     ) -> Option<f32> {
         crate::hvar::glyph_advance_variation(self.vvar?, glyph_id, coordinates)
     }
@@ -1171,7 +1216,7 @@ impl<'a> Font<'a> {
     pub fn glyph_ver_side_bearing_variation(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[F2DOT14],
+        coordinates: &[NormalizedCoord],
     ) -> Option<f32> {
         crate::hvar::glyph_side_bearing_variation(self.vvar?, glyph_id, coordinates)
     }
@@ -1251,7 +1296,8 @@ impl<'a> Font<'a> {
     /// You must check `outline_glyph()` result before using
     /// `OutlineBuilder`'s output.
     ///
-    /// This method supports `glyf` and `CFF` tables.
+    /// This method supports `glyf`, `CFF` and `CFF2` tables.
+    /// In case of a variable font, the default variation coordinates will be used.
     ///
     /// Returns `None` when glyph has no outline or on error.
     ///
@@ -1306,6 +1352,17 @@ impl<'a> Font<'a> {
             return cff::outline(metadata, glyph_id, builder);
         }
 
+        if let Some(ref metadata) = self.cff2 {
+            let mut coordinates = [NormalizedCoord::default(); 64]; // 64 is more than enough.
+            let coords_len = self.fvar?.axes().count();
+            if coords_len >= 64 {
+                return None;
+            }
+
+            let coordinates = &mut coordinates[0..coords_len];
+            return cff2::outline(metadata, coordinates, glyph_id, builder);
+        }
+
         None
     }
 
@@ -1326,7 +1383,7 @@ impl<'a> Font<'a> {
     pub fn outline_variable_glyph(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[F2DOT14],
+        coordinates: &[NormalizedCoord],
         builder: &mut dyn OutlineBuilder,
     ) -> Option<Rect> {
         if let Some(ref gvar_table) = self.gvar {
@@ -1349,6 +1406,9 @@ impl<'a> Font<'a> {
     /// a glyph and then calculate its bounding box. So if you need an outline and
     /// a bounding box and you have an OpenType font (which uses CFF)
     /// then prefer `outline_glyph()` method.
+    ///
+    /// This method supports `glyf`, `CFF` and `CFF2` tables.
+    /// In case of a variable font, the default variation coordinates will be used.
     #[inline]
     pub fn glyph_bounding_box(&self, glyph_id: GlyphId) -> Option<Rect> {
         if let Some(glyf_table) = self.glyf {
@@ -1359,10 +1419,16 @@ impl<'a> Font<'a> {
             return cff::outline(metadata, glyph_id, &mut DummyOutline);
         }
 
-        // TODO: use default coords
-        // if let Some(ref metadata) = self.cff2 {
-        //     return cff2::outline(metadata, glyph_id, &mut DummyOutline);
-        // }
+        if let Some(ref metadata) = self.cff2 {
+            let mut coordinates = [NormalizedCoord::default(); 64]; // 64 is more than enough.
+            let coords_len = self.fvar?.axes().count();
+            if coords_len >= 64 {
+                return None;
+            }
+
+            let coordinates = &mut coordinates[0..coords_len];
+            return cff2::outline(metadata, coordinates, glyph_id, &mut DummyOutline);
+        }
 
         None
     }
@@ -1375,7 +1441,7 @@ impl<'a> Font<'a> {
     pub fn variable_glyph_bounding_box(
         &self,
         glyph_id: GlyphId,
-        coordinates: &[F2DOT14],
+        coordinates: &[NormalizedCoord],
     ) -> Option<Rect> {
         if self.gvar.is_some() {
             return gvar::outline(self.loca?, self.glyf?, self.gvar.as_ref()?,

@@ -2,7 +2,7 @@
 
 use core::convert::TryFrom;
 
-use crate::{GlyphId, Tag};
+use crate::{GlyphId, Tag, NormalizedCoord};
 use crate::parser::*;
 use crate::raw::gsubgpos::{Record, Condition, FeatureVariationRecord};
 
@@ -464,11 +464,8 @@ pub struct FeatureVariation<'a> {
 impl<'a> FeatureVariation<'a> {
     /// Evaluates variation using specified `coordinates`.
     ///
-    /// Note: coordinates should be converted from fixed point 2.14 to i16
-    /// by multiplying each coordinate by 16384.
-    ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
-    pub fn evaluate(&self, coordinates: &[i16]) -> bool {
+    pub fn evaluate(&self, coordinates: &[NormalizedCoord]) -> bool {
         for condition in try_opt_or!(self.condition_set(), false) {
             if !condition.evaluate(coordinates) {
                 return false;
@@ -534,9 +531,9 @@ impl<'a> Iterator for ConditionSet<'a> {
 
 
 impl Condition {
-    fn evaluate(&self, coordinates: &[i16]) -> bool {
-        let coord = coordinates.get(self.axis_index() as usize).cloned().unwrap_or(0);
-        self.filter_range_min_value() <= coord && coord <= self.filter_range_max_value()
+    fn evaluate(&self, coordinates: &[NormalizedCoord]) -> bool {
+        let coord = coordinates.get(self.axis_index() as usize).cloned().unwrap_or_default();
+        self.filter_range_min_value() <= coord.get() && coord.get() <= self.filter_range_max_value()
     }
 }
 

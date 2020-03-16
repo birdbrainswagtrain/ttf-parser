@@ -96,23 +96,13 @@ fn process(args: Args) -> Result<(), Box<dyn std::error::Error>> {
 
     let var_coords = if font.is_variable() {
         let coords_len = font.variation_axes().count();
-        let mut coords = vec![0i16; coords_len];
+        let mut coords = vec![ttf::NormalizedCoord::from(0); coords_len];
 
         if let Some(variations) = args.variations {
             for variation in variations {
                 let v = font.variation_axes().enumerate().find(|(_, axis)| axis.tag == variation.tag);
                 if let Some((idx, axis)) = v {
-                    let mut v = f32_bound(axis.min_value, variation.value, axis.max_value);
-
-                    if v == axis.def_value {
-                        v = 0.0;
-                    } else if v < axis.def_value {
-                        v = (v - axis.def_value) / (axis.def_value - axis.min_value);
-                    } else {
-                        v = (v - axis.def_value) / (axis.max_value - axis.def_value);
-                    }
-
-                    coords[idx] = (v * 16384.0).round() as i16;
+                    coords[idx] = axis.normalized_value(variation.value);
                 } else {
                     warn!("Font doesn't have a '{}' axis.", variation.tag);
                 }
@@ -215,7 +205,7 @@ fn glyph_to_path(
     glyph_id: ttf::GlyphId,
     cell_size: f64,
     scale: f64,
-    var_coords: &[i16],
+    var_coords: &[ttf::NormalizedCoord],
     svg: &mut xmlwriter::XmlWriter,
     path_buf: &mut svgtypes::Path,
 ) {
@@ -293,20 +283,4 @@ impl ttf::OutlineBuilder for Builder<'_> {
     fn close(&mut self) {
         self.0.push_close_path();
     }
-}
-
-
-#[inline]
-fn f32_bound(min: f32, val: f32, max: f32) -> f32 {
-    debug_assert!(min.is_finite());
-    debug_assert!(val.is_finite());
-    debug_assert!(max.is_finite());
-
-    if val > max {
-        return max;
-    } else if val < min {
-        return min;
-    }
-
-    val
 }
