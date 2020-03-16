@@ -73,12 +73,16 @@ impl<'a> Table<'a> {
         })
     }
 
+    #[inline]
     fn parse_variation_data(
         &self,
         glyph_id: GlyphId,
         coordinates: &[i16],
         points_len: u16,
-    ) -> Option<VariationTuples> {
+        tuples: &mut VariationTuples<'a>,
+    ) -> Option<()> {
+        tuples.len = 0;
+
         if coordinates.len() != usize::from(self.axis_count.get()) {
             return None;
         }
@@ -98,11 +102,11 @@ impl<'a> Table<'a> {
 
         // Ignore empty data.
         if start == end {
-            return Some(VariationTuples::default());
+            return Some(());
         }
 
         let data = self.glyphs_variation_data.get(start..end)?;
-        parse_variation_data(coordinates, &self.shared_tuple_records, points_len, data)
+        parse_variation_data(coordinates, &self.shared_tuple_records, points_len, data, tuples)
     }
 }
 
@@ -116,14 +120,16 @@ pub fn outline(
     builder: &mut dyn OutlineBuilder,
 ) -> Option<Rect> {
     let mut b = glyf::Builder::new(Transform::default(), Some(BBox::new()), builder);
+
     let range = loca_table.glyph_range(glyph_id)?;
     let glyph_data = glyf_table.get(range)?;
+
     outline_var_impl(loca_table, glyf_table, gvar_table,
                      glyph_id, glyph_data, coordinates, 0, &mut b);
     b.bbox.and_then(|bbox| bbox.to_rect())
 }
 
-fn outline_var_impl(
+fn outline_var_impl<'a>(
     loca_table: loca::Table,
     glyf_table: &[u8],
     gvar_table: &Table,
@@ -148,6 +154,12 @@ fn outline_var_impl(
     // Instead, we have to manually calculate outline's bbox.
     s.advance(8u32);
 
+    // `VariationTuples` is a very large struct, so allocate it once.
+    let mut tuples = VariationTuples {
+        headers: [VariationTuple::default(); MAX_TUPLES_LEN as usize],
+        len: 0,
+    };
+
     if number_of_contours > 0 {
         // Simple glyph.
 
@@ -155,7 +167,7 @@ fn outline_var_impl(
         let mut glyph_points = glyf::parse_simple_outline(s.tail()?, number_of_contours)?;
         let all_glyph_points = glyph_points.clone();
         let points_len = glyph_points.points_left;
-        let mut tuples = gvar_table.parse_variation_data(glyph_id, coordinates, points_len)?;
+        gvar_table.parse_variation_data(glyph_id, coordinates, points_len, &mut tuples)?;
 
         while let Some(point) = glyph_points.next() {
             let (x, y) = tuples.apply(all_glyph_points.clone(), glyph_points.clone(), point)?;
@@ -176,7 +188,7 @@ fn outline_var_impl(
 
         let mut components = glyf::CompositeGlyphIter::new(s.tail()?);
         let components_count = components.clone().count() as u16;
-        let mut tuples = gvar_table.parse_variation_data(glyph_id, coordinates, components_count)?;
+        gvar_table.parse_variation_data(glyph_id, coordinates, components_count, &mut tuples)?;
 
         while let Some(component) = components.next() {
             let (tx, ty) = tuples.apply_null()?;
@@ -216,7 +228,8 @@ fn parse_variation_data<'a>(
     shared_tuple_records: &LazyArray16<F2DOT14>,
     points_len: u16,
     data: &'a [u8],
-) -> Option<VariationTuples<'a>> {
+    tuples: &mut VariationTuples<'a>,
+) -> Option<()> {
     const SHARED_POINT_NUMBERS: u16 = 0x8000;
     const COUNT_MASK: u16 = 0x0FFF;
 
@@ -260,6 +273,7 @@ fn parse_variation_data<'a>(
         points_len.checked_add(PHANTOM_POINTS_LEN as u16)?,
         main_stream,
         serialized_stream,
+        tuples,
     )
 }
 
@@ -294,7 +308,6 @@ const MAX_TUPLES_LEN: u16 = 32;
 /// On stack and not on heap, but still.
 /// This is probably unavoidable due to `gvar` structure,
 /// since we have to iterate all tuples in parallel.
-#[derive(Default)]
 struct VariationTuples<'a> {
     headers: [VariationTuple<'a>; MAX_TUPLES_LEN as usize], // 2560B
     len: u16,
@@ -364,7 +377,6 @@ impl<'a> VariationTuples<'a> {
     // This is just like `apply()`, but without `infer_deltas`,
     // since we use it only for component points and not a contour.
     // And since there are no contour and no points, `infer_deltas()` will do nothing.
-    #[inline]
     fn apply_null(&mut self) -> Option<(f32, f32)> {
         let mut x = 0.0;
         let mut y = 0.0;
@@ -406,13 +418,9 @@ fn parse_variation_tuples<'a>(
     points_len: u16,
     mut main_s: Stream<'a>,
     mut serialized_s: Stream<'a>,
-) -> Option<VariationTuples<'a>> {
+    tuples: &mut VariationTuples<'a>,
+) -> Option<()> {
     debug_assert!(core::mem::size_of::<VariationTuple>() <= 80);
-
-    let mut tuples = VariationTuples {
-        headers: [VariationTuple::default(); MAX_TUPLES_LEN as usize],
-        len: 0,
-    };
 
     // `TupleVariationHeader` has a variable size, so we cannot use a `LazyArray`.
     for _ in 0..count {
@@ -463,11 +471,10 @@ fn parse_variation_tuples<'a>(
         tuples.len += 1;
     }
 
-    Some(tuples)
+    Some(())
 }
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuplevariationheader
-#[inline]
 fn parse_tuple_variation_header(
     coordinates: &[i16],
     shared_tuple_records: &LazyArray16<F2DOT14>,
@@ -599,7 +606,6 @@ mod packed_points {
     }
 
     impl<'a> PackedPointsIter<'a> {
-        #[inline]
         pub fn new<'b>(s: &'b mut Stream<'a>) -> Option<Option<Self>> {
             // The total amount of points can be set as one or two bytes
             // depending on the first bit.
@@ -660,7 +666,6 @@ mod packed_points {
     impl<'a> Iterator for PackedPointsIter<'a> {
         type Item = u16;
 
-        #[inline]
         fn next(&mut self) -> Option<Self::Item> {
             if self.offset >= self.data.len() as u16 {
                 return None;
@@ -679,22 +684,13 @@ mod packed_points {
 
                 self.next()
             } else {
+                let mut s = Stream::new_at(self.data, self.offset as usize);
                 let point = if self.state == State::LongPoint {
-                    if self.offset + 2 > self.data.len() as u16 {
-                        return None;
-                    }
-
-                    let n = u16::parse(&self.data[self.offset as usize..]);
                     self.offset += 2;
-                    n
+                    s.read::<u16>()?
                 } else {
-                    if self.offset + 1 > self.data.len() as u16 {
-                        return None;
-                    }
-
-                    let n = self.data[self.offset as usize];
                     self.offset += 1;
-                    n as u16
+                    s.read::<u8>()? as u16
                 };
 
                 self.points_left -= 1;
@@ -786,7 +782,7 @@ use packed_points::*;
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#packed-deltas
 mod packed_deltas {
-    use crate::parser::FromData;
+    use crate::parser::Stream;
 
     struct Control(u8);
 
@@ -833,7 +829,6 @@ mod packed_deltas {
     }
 
     impl RunState {
-        #[inline]
         fn next(&mut self, data: &[u8], scalar: f32) -> Option<f32> {
             if self.state == State::Control {
                 if self.data_offset == data.len() as u16 {
@@ -854,24 +849,15 @@ mod packed_deltas {
 
                 self.next(data, scalar)
             } else {
+                let mut s = Stream::new_at(data, self.data_offset as usize);
                 let delta = if self.state == State::LongDelta {
-                    if self.data_offset as usize + 2 > data.len() {
-                        return None;
-                    }
-
-                    let n = i16::parse(&data[self.data_offset as usize..]) as f32;
                     self.data_offset += 2;
-                    n * scalar
+                    s.read::<i16>()? as f32 * scalar
                 } else if self.state == State::ZeroDelta {
                     0.0
                 } else {
-                    if self.data_offset as usize + 1 > data.len() {
-                        return None;
-                    }
-
-                    let n = data[self.data_offset as usize] as i8 as f32;
                     self.data_offset += 1;
-                    n * scalar
+                    s.read::<i8>()? as f32 * scalar
                 };
 
                 self.run_deltas_left -= 1;
@@ -903,7 +889,6 @@ mod packed_deltas {
     }
 
     impl<'a> PackedDeltasIter<'a> {
-        #[inline]
         pub fn new(scalar: f32, total_count: u16, data: &'a [u8]) -> Self {
             debug_assert!(core::mem::size_of::<PackedDeltasIter>() <= 32);
 
@@ -1099,7 +1084,6 @@ fn infer_deltas(
     (dx, dy)
 }
 
-#[inline]
 fn infer_delta(
     prev_point: i16,
     target_point: i16,
