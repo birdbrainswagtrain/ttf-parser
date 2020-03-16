@@ -67,8 +67,6 @@ Can be used as Rust and as C library.
 ## Supported OpenType features
 
 - (`CFF `) Glyph outlining using [outline_glyph()] method.
-- (`CFF2`) Variable glyph outlining using [outline_variable_glyph()] method.
-- (`gvar`) Variable glyph outlining using [outline_variable_glyph()] method.
 - (`OS/2`) Retrieving font's kind using [is_regular()], [is_italic()],
   [is_bold()] and [is_oblique()] methods.
 - (`OS/2`) Retrieving font's weight using [weight()] method.
@@ -80,14 +78,7 @@ Can be used as Rust and as C library.
 - (`GDEF`) Retrieving glyph's class using [glyph_class()] method.
 - (`GDEF`) Retrieving glyph's mark attachment class using [glyph_mark_attachment_class()] method.
 - (`GDEF`) Checking that glyph is a mark using [is_mark_glyph()] method.
-- (`avar`) Variation coordinates normalization using [map_variation_coordinates()] method.
-- (`fvar`) Variation axis parsing using [variation_axes()] method.
 - (`VORG`) Retrieving glyph's vertical origin using [glyph_y_origin()] method.
-- (`MVAR`) Retrieving font's metrics variation using [metrics_variation()] method.
-- (`HVAR`) Retrieving glyph's variation offset for horizontal advance using [glyph_hor_advance_variation()] method.
-- (`HVAR`) Retrieving glyph's variation offset for horizontal side bearing using [glyph_hor_side_bearing_variation()] method.
-- (`VVAR`) Retrieving glyph's variation offset for vertical advance using [glyph_ver_advance_variation()] method.
-- (`VVAR`) Retrieving glyph's variation offset for vertical side bearing using [glyph_ver_side_bearing_variation()] method.
 
 [is_regular()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.is_regular
 [is_italic()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.is_italic
@@ -102,10 +93,26 @@ Can be used as Rust and as C library.
 [glyph_class()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_class
 [glyph_mark_attachment_class()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_mark_attachment_class
 [is_mark_glyph()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.is_mark_glyph
+[glyph_y_origin()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_y_origin
+
+
+## Variable fonts
+
+The library has a complete support for variable font. You can access the variable data using:
+
+- (`gvar`) Variable glyph outlining using [outline_variable_glyph()] method.
+- (`CFF2`) Variable glyph outlining using [outline_variable_glyph()] method.
+- (`avar`) Variation coordinates normalization using [map_variation_coordinates()] method.
+- (`fvar`) Variation axes parsing using [variation_axes()] method.
+- (`HVAR`) Retrieving glyph's variation offset for horizontal advance using [glyph_hor_advance_variation()] method.
+- (`HVAR`) Retrieving glyph's variation offset for horizontal side bearing using [glyph_hor_side_bearing_variation()] method.
+- (`VVAR`) Retrieving glyph's variation offset for vertical advance using [glyph_ver_advance_variation()] method.
+- (`VVAR`) Retrieving glyph's variation offset for vertical side bearing using [glyph_ver_side_bearing_variation()] method.
+- (`MVAR`) Retrieving font's metrics variation using [metrics_variation()] method.
+
 [outline_variable_glyph()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.outline_variable_glyph
 [map_variation_coordinates()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.map_variation_coordinates
 [variation_axes()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.variation_axis
-[glyph_y_origin()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_y_origin
 [metrics_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.metrics_variation
 [glyph_hor_advance_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_hor_advance_variation
 [glyph_hor_side_bearing_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_hor_side_bearing_variation
@@ -264,7 +271,7 @@ pub use parser::{FromData, ArraySize, LazyArray, LazyArray16, LazyArray32, LazyA
 
 
 /// A type-safe wrapper for glyph ID.
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug)]
 pub struct GlyphId(pub u16);
 
@@ -289,7 +296,7 @@ impl Default for GlyphId {
 /// Where 0 is a default value.
 ///
 /// The number is stored as f2.16
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
 pub struct NormalizedCoord(i16);
 
@@ -927,7 +934,7 @@ impl<'a> Font<'a> {
         self.fvar.is_some()
     }
 
-    /// Parses font's weight.
+    /// Returns font's weight.
     ///
     /// Returns `Weight::Normal` when OS/2 table is not present.
     #[inline]
@@ -935,7 +942,7 @@ impl<'a> Font<'a> {
         try_opt_or!(self.os_2, Weight::default()).weight()
     }
 
-    /// Parses font's width.
+    /// Returns font's width.
     ///
     /// Returns `Width::Normal` when OS/2 table is not present or when value is invalid.
     #[inline]
@@ -943,7 +950,7 @@ impl<'a> Font<'a> {
         try_opt_or!(self.os_2, Width::default()).width()
     }
 
-    /// Parses font's ascender value.
+    /// Returns font's ascender value.
     #[inline]
     pub fn ascender(&self) -> i16 {
         if let Some(os_2) = self.os_2 {
@@ -955,7 +962,7 @@ impl<'a> Font<'a> {
         self.hhea.ascender()
     }
 
-    /// Parses font's descender value.
+    /// Returns font's descender value.
     #[inline]
     pub fn descender(&self) -> i16 {
         if let Some(os_2) = self.os_2 {
@@ -967,13 +974,13 @@ impl<'a> Font<'a> {
         self.hhea.descender()
     }
 
-    /// Parses font's height.
+    /// Returns font's height.
     #[inline]
     pub fn height(&self) -> i16 {
         self.ascender() - self.descender()
     }
 
-    /// Parses font's line gap.
+    /// Returns font's line gap.
     #[inline]
     pub fn line_gap(&self) -> i16 {
         if let Some(os_2) = self.os_2 {
@@ -987,7 +994,7 @@ impl<'a> Font<'a> {
 
     // TODO: should we automatically use the vhea?
 
-    /// Parses font's vertical ascender value.
+    /// Returns font's vertical ascender value.
     ///
     /// Returns `None` when `vhea` table is not present.
     #[inline]
@@ -995,7 +1002,7 @@ impl<'a> Font<'a> {
         self.vhea.map(|table| table.ascender())
     }
 
-    /// Parses font's vertical descender value.
+    /// Returns font's vertical descender value.
     ///
     /// Returns `None` when `vhea` table is not present.
     #[inline]
@@ -1003,7 +1010,7 @@ impl<'a> Font<'a> {
         self.vhea.map(|table| table.descender())
     }
 
-    /// Parses font's vertical height.
+    /// Returns font's vertical height.
     ///
     /// Returns `None` when `vhea` table is not present.
     #[inline]
@@ -1011,7 +1018,7 @@ impl<'a> Font<'a> {
         Some(self.vertical_ascender()? - self.vertical_descender()?)
     }
 
-    /// Parses font's vertical line gap.
+    /// Returns font's vertical line gap.
     ///
     /// Returns `None` when `vhea` table is not present.
     #[inline]
@@ -1019,7 +1026,7 @@ impl<'a> Font<'a> {
         self.vhea.map(|table| table.line_gap())
     }
 
-    /// Parses glyphs index to location format.
+    /// Returns glyphs index to location format.
     #[inline]
     pub(crate) fn index_to_location_format(&self) -> Option<IndexToLocationFormat> {
         match self.head.index_to_loc_format() {
@@ -1029,7 +1036,7 @@ impl<'a> Font<'a> {
         }
     }
 
-    /// Parses font's units per EM.
+    /// Returns font's units per EM.
     ///
     /// Returns `None` when value is not in a 16..=16384 range.
     #[inline]
@@ -1042,7 +1049,7 @@ impl<'a> Font<'a> {
         }
     }
 
-    /// Parses font's X height.
+    /// Returns font's X height.
     ///
     /// Returns `None` when OS/2 table is not present or when its version is < 2.
     #[inline]
@@ -1056,7 +1063,7 @@ impl<'a> Font<'a> {
         self.post.and_then(|post| post.underline_metrics())
     }
 
-    /// Parses font's strikeout metrics.
+    /// Returns font's strikeout metrics.
     ///
     /// Returns `None` when OS/2 table is not present.
     #[inline]
@@ -1064,7 +1071,7 @@ impl<'a> Font<'a> {
         self.os_2.and_then(|os_2| os_2.strikeout_metrics())
     }
 
-    /// Parses font's subscript metrics.
+    /// Returns font's subscript metrics.
     ///
     /// Returns `None` when OS/2 table is not present.
     #[inline]
@@ -1072,7 +1079,7 @@ impl<'a> Font<'a> {
         self.os_2.and_then(|os_2| os_2.subscript_metrics())
     }
 
-    /// Parses font's superscript metrics.
+    /// Returns font's superscript metrics.
     ///
     /// Returns `None` when OS/2 table is not present.
     #[inline]
@@ -1080,10 +1087,10 @@ impl<'a> Font<'a> {
         self.os_2.and_then(|os_2| os_2.superscript_metrics())
     }
 
-    /// Parses metrics variation offset using
+    /// Returns metrics variation offset using
     /// [Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/mvar).
     ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
+    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
     ///
     /// Returns `None` when `MVAR` table is not present or invalid.
     pub fn metrics_variation(&self, tag: Tag, coordinates: &[NormalizedCoord]) -> Option<f32> {
@@ -1144,10 +1151,10 @@ impl<'a> Font<'a> {
         self.hmtx.and_then(|hmtx| hmtx.advance(glyph_id))
     }
 
-    /// Parses glyph's variation offset for horizontal advance using
+    /// Returns glyph's variation offset for horizontal advance using
     /// [Horizontal Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hvar).
     ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
+    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
     ///
     /// Returns `None` when `HVAR` table is not present or invalid.
     pub fn glyph_hor_advance_variation(
@@ -1165,10 +1172,10 @@ impl<'a> Font<'a> {
         self.hmtx.and_then(|hmtx| hmtx.side_bearing(glyph_id))
     }
 
-    /// Parses glyph's variation offset for horizontal side bearing using
+    /// Returns glyph's variation offset for horizontal side bearing using
     /// [Horizontal Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hvar).
     ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
+    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
     ///
     /// Returns `None` when `HVAR` table is not present or invalid.
     pub fn glyph_hor_side_bearing_variation(
@@ -1186,10 +1193,10 @@ impl<'a> Font<'a> {
         self.vmtx.and_then(|vmtx| vmtx.advance(glyph_id))
     }
 
-    /// Parses glyph's variation offset for vertical advance using
+    /// Returns glyph's variation offset for vertical advance using
     /// [Vertical Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vvar).
     ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
+    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
     ///
     /// Returns `None` when `VVAR` table is not present or invalid.
     pub fn glyph_ver_advance_variation(
@@ -1207,10 +1214,10 @@ impl<'a> Font<'a> {
         self.vmtx.and_then(|vmtx| vmtx.side_bearing(glyph_id))
     }
 
-    /// Parses glyph's variation offset for vertical side bearing using
+    /// Returns glyph's variation offset for vertical side bearing using
     /// [Vertical Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vvar).
     ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
+    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
     ///
     /// Returns `None` when `VVAR` table is not present or invalid.
     pub fn glyph_ver_side_bearing_variation(
@@ -1243,7 +1250,7 @@ impl<'a> Font<'a> {
         self.glyph_class(GlyphId(0)).is_some()
     }
 
-    /// Parses glyph's class according to
+    /// Returns glyph's class according to
     /// [Glyph Class Definition Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#glyph-class-definition-table).
     ///
     /// Returns `None` when *Glyph Class Definition Table* is not set
@@ -1252,7 +1259,7 @@ impl<'a> Font<'a> {
         self.gdef.and_then(|gdef| gdef.glyph_class(glyph_id))
     }
 
-    /// Parses glyph's mark attachment class according to
+    /// Returns glyph's mark attachment class according to
     /// [Mark Attachment Class Definition Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#mark-attachment-class-definition-table).
     ///
     /// All glyphs not assigned to a class fall into Class 0.
@@ -1368,7 +1375,7 @@ impl<'a> Font<'a> {
 
     /// Outlines a variable glyph and returns its tight bounding box.
     ///
-    /// Number of `coordinates` should be the same as number of variation axes in the font.
+    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
     ///
     /// **Warning**: since `ttf-parser` is a pull parser,
     /// `OutlineBuilder` will emit segments even when outline is partially malformed.
@@ -1437,22 +1444,15 @@ impl<'a> Font<'a> {
     ///
     /// This is just a `outline_variable_glyph()` shorthand, since we have to outline
     /// the glyph in case of a variable font to get its bounding box.
+    ///
+    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
     #[inline]
     pub fn variable_glyph_bounding_box(
         &self,
         glyph_id: GlyphId,
         coordinates: &[NormalizedCoord],
     ) -> Option<Rect> {
-        if self.gvar.is_some() {
-            return gvar::outline(self.loca?, self.glyf?, self.gvar.as_ref()?,
-                                 coordinates, glyph_id, &mut DummyOutline);
-        }
-
-        if let Some(ref metadata) = self.cff2 {
-            return cff2::outline(metadata, coordinates, glyph_id, &mut DummyOutline);
-        }
-
-        None
+        self.outline_variable_glyph(glyph_id, coordinates, &mut DummyOutline)
     }
 }
 

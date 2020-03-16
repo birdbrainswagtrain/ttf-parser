@@ -13,11 +13,11 @@ pub struct ttfp_font {
 
 #[repr(C)]
 pub struct ttfp_outline_builder {
-    move_to: unsafe extern "C" fn(x: f32, y: f32, data: *mut c_void),
-    line_to: unsafe extern "C" fn(x: f32, y: f32, data: *mut c_void),
-    quad_to: unsafe extern "C" fn(x1: f32, y1: f32, x: f32, y: f32, data: *mut c_void),
-    curve_to: unsafe extern "C" fn(x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32, data: *mut c_void),
-    close_path: unsafe extern "C" fn(data: *mut c_void),
+    pub move_to: unsafe extern "C" fn(x: f32, y: f32, data: *mut c_void),
+    pub line_to: unsafe extern "C" fn(x: f32, y: f32, data: *mut c_void),
+    pub quad_to: unsafe extern "C" fn(x1: f32, y1: f32, x: f32, y: f32, data: *mut c_void),
+    pub curve_to: unsafe extern "C" fn(x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32, data: *mut c_void),
+    pub close_path: unsafe extern "C" fn(data: *mut c_void),
 }
 
 struct Builder(ttfp_outline_builder, *mut c_void);
@@ -77,14 +77,174 @@ pub extern "C" fn ttfp_create_font(data: *const c_char, len: usize, index: u32) 
     }).unwrap_or(std::ptr::null_mut())
 }
 
+/// @brief Destroys the #ttfp_font.
 #[no_mangle]
 pub extern "C" fn ttfp_destroy_font(font: *mut ttfp_font) {
     unsafe { Box::from_raw(font) };
 }
 
+/// @brief Checks that font has a specified table.
+///
+/// Will return `true` only for tables that were successfully parsed.
 #[no_mangle]
 pub extern "C" fn ttfp_has_table(font: *const ttfp_font, name: ttf_parser::TableName) -> bool {
     font_from_ptr(font).has_table(name)
+}
+
+/// @brief Returns the number of name records in the font.
+#[no_mangle]
+pub extern "C" fn ttfp_get_name_records_count(font: *const ttfp_font) -> u16 {
+    font_from_ptr(font).names().count() as u16
+}
+
+/// @brief Returns a name record.
+///
+/// @param Record's index. The total amount can be obtained via #ttfp_get_name_records_count.
+/// @return `false` when `index` is out of range or `platform_id` is invalid.
+#[no_mangle]
+pub extern "C" fn ttfp_get_name_record(
+    font: *const ttfp_font,
+    index: u16,
+    raw_record: *mut ttfp_name_record,
+) -> bool {
+    match font_from_ptr(font).names().nth(index as usize) {
+        Some(record) => {
+            unsafe {
+                (*raw_record).platform_id = match record.platform_id() {
+                    Some(ttf_parser::PlatformId::Unicode) => 0,
+                    Some(ttf_parser::PlatformId::Macintosh) => 1,
+                    Some(ttf_parser::PlatformId::Iso) => 2,
+                    Some(ttf_parser::PlatformId::Windows) => 3,
+                    Some(ttf_parser::PlatformId::Custom) => 4,
+                    None => return false,
+                };
+
+                (*raw_record).encoding_id = record.encoding_id();
+                (*raw_record).language_id = record.language_id();
+                (*raw_record).name_id = record.name_id();
+                (*raw_record).name_size = record.name().len() as u16;
+            }
+
+            true
+        }
+        None => false,
+    }
+}
+
+/// @brief Returns a name record's string.
+///
+/// @param name A string buffer that will be filled with the record's name.
+///             Remember that a name will use encoding specified in `ttfp_name_record.encoding_id`
+///             Because of that, the name will not be null-terminated.
+/// @param name_size Size of the string buffer. Must be equal to `ttfp_name_record.name_size`.
+/// @return `false` when `index` is out of range or string buffer is not equal
+///         `ttfp_name_record.name_size`.
+#[no_mangle]
+pub extern "C" fn ttfp_get_name_record_string(
+    font: *const ttfp_font,
+    index: u16,
+    raw_name: *mut c_char,
+    raw_name_size: usize,
+) -> bool {
+    match font_from_ptr(font).names().nth(index as usize) {
+        Some(record) => {
+            let name = record.name();
+            if name.len() != raw_name_size {
+                return false;
+            }
+
+            let raw_name = unsafe { std::slice::from_raw_parts_mut(raw_name, raw_name_size) };
+            for (i, c) in name.iter().enumerate() {
+                raw_name[i] = *c as c_char;
+            }
+
+            true
+        }
+        None => false,
+    }
+}
+
+/// @brief Checks that font is marked as *Regular*.
+///
+/// Will return `false` when OS/2 table is not present.
+#[no_mangle]
+pub extern "C" fn ttfp_is_regular(font: *const ttfp_font) -> bool {
+    font_from_ptr(font).is_regular()
+}
+
+/// @brief Checks that font is marked as *Italic*.
+///
+/// Will return `false` when OS/2 table is not present.
+#[no_mangle]
+pub extern "C" fn ttfp_is_italic(font: *const ttfp_font) -> bool {
+    font_from_ptr(font).is_italic()
+}
+
+/// @brief Checks that font is marked as *Bold*.
+///
+/// Will return `false` when OS/2 table is not present.
+#[no_mangle]
+pub extern "C" fn ttfp_is_bold(font: *const ttfp_font) -> bool {
+    font_from_ptr(font).is_bold()
+}
+
+/// @brief Checks that font is marked as *Oblique*.
+///
+/// Will return `false` when OS/2 table is not present or when its version is < 4.
+#[no_mangle]
+pub extern "C" fn ttfp_is_oblique(font: *const ttfp_font) -> bool {
+    font_from_ptr(font).is_oblique()
+}
+
+/// @brief Checks if font is a variable font.
+#[no_mangle]
+pub extern "C" fn ttfp_is_variable(font: *const ttfp_font) -> bool {
+    font_from_ptr(font).is_variable()
+}
+
+/// @brief Returns font's weight.
+///
+/// Returns `400` when OS/2 table is not present.
+#[no_mangle]
+pub extern "C" fn ttfp_get_weight(font: *const ttfp_font) -> u16 {
+    font_from_ptr(font).weight().to_number()
+}
+
+/// Returns font's width.
+///
+/// @return A number in a 1..9 range or 5/Normal when OS/2 table is not present.
+#[no_mangle]
+pub extern "C" fn ttfp_get_width(font: *const ttfp_font) -> u16 {
+    font_from_ptr(font).width().to_number()
+}
+
+/// Returns font's ascender value.
+#[no_mangle]
+pub extern "C" fn ttfp_get_ascender(font: *const ttfp_font) -> i16 {
+    font_from_ptr(font).ascender()
+}
+
+/// Returns font's descender value.
+#[no_mangle]
+pub extern "C" fn ttfp_get_descender(font: *const ttfp_font) -> i16 {
+    font_from_ptr(font).descender()
+}
+
+/// Returns font's height.
+#[no_mangle]
+pub extern "C" fn ttfp_get_height(font: *const ttfp_font) -> i16 {
+    font_from_ptr(font).height()
+}
+
+/// Returns font's line gap.
+#[no_mangle]
+pub extern "C" fn ttfp_get_line_gap(font: *const ttfp_font) -> i16 {
+    font_from_ptr(font).line_gap()
+}
+
+#[no_mangle]
+pub extern "C" fn ttfp_get_x_height(font: *const ttfp_font) -> i16 {
+    font_from_ptr(font).x_height().unwrap_or(0)
 }
 
 #[no_mangle]
@@ -195,123 +355,8 @@ pub extern "C" fn ttfp_is_mark_glyph(font: *const ttfp_font, glyph_id: GlyphId) 
 }
 
 #[no_mangle]
-pub extern "C" fn ttfp_get_name_records_count(font: *const ttfp_font) -> u16 {
-    font_from_ptr(font).names().count() as u16
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_name_record(
-    font: *const ttfp_font,
-    index: u16,
-    raw_record: *mut ttfp_name_record,
-) -> bool {
-    match font_from_ptr(font).names().nth(index as usize) {
-        Some(record) => {
-            unsafe {
-                (*raw_record).platform_id = match record.platform_id() {
-                    Some(ttf_parser::PlatformId::Unicode) => 0,
-                    Some(ttf_parser::PlatformId::Macintosh) => 1,
-                    Some(ttf_parser::PlatformId::Iso) => 2,
-                    Some(ttf_parser::PlatformId::Windows) => 3,
-                    Some(ttf_parser::PlatformId::Custom) => 4,
-                    None => return false,
-                };
-
-                (*raw_record).encoding_id = record.encoding_id();
-                (*raw_record).language_id = record.language_id();
-                (*raw_record).name_id = record.name_id();
-                (*raw_record).name_size = record.name().len() as u16;
-            }
-
-            true
-        }
-        None => false,
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_name_record_string(
-    font: *const ttfp_font,
-    index: u16,
-    raw_name: *mut c_char,
-    raw_name_size: usize,
-) -> bool {
-    match font_from_ptr(font).names().nth(index as usize) {
-        Some(record) => {
-            let name = record.name();
-            if name.len() != raw_name_size {
-                return false;
-            }
-
-            let raw_name = unsafe { std::slice::from_raw_parts_mut(raw_name, raw_name_size) };
-            for (i, c) in name.iter().enumerate() {
-                raw_name[i] = *c as c_char;
-            }
-
-            true
-        }
-        None => false,
-    }
-}
-
-#[no_mangle]
 pub extern "C" fn ttfp_get_units_per_em(font: *const ttfp_font) -> u16 {
     font_from_ptr(font).units_per_em().unwrap_or(0)
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_ascender(font: *const ttfp_font) -> i16 {
-    font_from_ptr(font).ascender()
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_descender(font: *const ttfp_font) -> i16 {
-    font_from_ptr(font).descender()
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_height(font: *const ttfp_font) -> i16 {
-    font_from_ptr(font).height()
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_line_gap(font: *const ttfp_font) -> i16 {
-    font_from_ptr(font).line_gap()
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_is_regular(font: *const ttfp_font) -> bool {
-    font_from_ptr(font).is_regular()
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_is_italic(font: *const ttfp_font) -> bool {
-    font_from_ptr(font).is_italic()
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_is_bold(font: *const ttfp_font) -> bool {
-    font_from_ptr(font).is_bold()
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_is_oblique(font: *const ttfp_font) -> bool {
-    font_from_ptr(font).is_oblique()
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_weight(font: *const ttfp_font) -> u16 {
-    font_from_ptr(font).weight().to_number()
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_width(font: *const ttfp_font) -> u16 {
-    font_from_ptr(font).width().to_number()
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_x_height(font: *const ttfp_font) -> i16 {
-    font_from_ptr(font).x_height().unwrap_or(0)
 }
 
 #[no_mangle]
@@ -501,6 +546,7 @@ pub extern "C" fn ttfp_get_variation_axis_by_tag(
     }
 }
 
+/// Comment.
 #[no_mangle]
 pub extern "C" fn ttfp_map_variation_coordinates(
     font: *const ttfp_font,
@@ -521,12 +567,6 @@ pub extern "C" fn ttfp_init_log() {
     if let Ok(()) = log::set_logger(&logging::LOGGER) {
         log::set_max_level(log::LevelFilter::Warn);
     }
-}
-
-#[cfg(not(feature = "logging"))]
-#[no_mangle]
-pub extern "C" fn ttfp_init_log() {
-    // Do nothing.
 }
 
 #[cfg(test)]

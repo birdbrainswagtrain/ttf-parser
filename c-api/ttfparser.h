@@ -140,10 +140,9 @@ typedef enum ttfp_glyph_class {
  * @brief Initializes the library log.
  *
  * Use it if you want to see any warnings.
+ * All warnings will be printed to the \b stderr.
  *
  * Will do nothing when library is built without the \b logging feature.
- *
- * All warnings will be printed to the \b stderr.
  */
 void ttfp_init_log();
 
@@ -180,6 +179,100 @@ void ttfp_destroy_font(ttfp_font *font);
  * Will return `true` only for tables that were successfully parsed.
  */
 bool ttfp_has_table(const ttfp_font *font, ttfp_table_name name);
+
+/**
+ * @brief Returns the number of name records in the font.
+ */
+uint16_t ttfp_get_name_records_count(const ttfp_font *font);
+
+/**
+ * @brief Returns a name record.
+ *
+ * @param Record's index. The total count can be obtained via #ttfp_get_name_records_count.
+ * @return \b false when \b index is out of range or \b platform_id is invalid.
+ */
+bool ttfp_get_name_record(const ttfp_font *font, uint16_t index, ttfp_name_record *record);
+
+/**
+ * @brief Returns a name record's string.
+ *
+ * @param name A string buffer that will be filled with the record's name.
+ *             Remember that a name will use encoding specified in \b ttfp_name_record.encoding_id
+ *             Because of that, the name will not be null-terminated.
+ * @param name_size Size of the string buffer. Must be equal to \b ttfp_name_record.name_sizeq
+ * @return \b false when \b index is out of range or string buffer is not equal
+ *         \b ttfp_name_record.name_size.
+ */
+bool ttfp_get_name_record_string(const ttfp_font *font, uint16_t index, char *name, size_t name_size);
+
+
+/**
+ * @brief Checks that font is marked as \b Regular.
+ */
+bool ttfp_is_regular(const ttfp_font *font);
+
+/**
+ * @brief Checks that font is marked as \b Italic.
+ */
+bool ttfp_is_italic(const ttfp_font *font);
+
+/**
+ * @brief Checks that font is marked as \b Bold.
+ */
+bool ttfp_is_bold(const ttfp_font *font);
+
+/**
+ * @brief Checks that font is marked as \b Oblique.
+ */
+bool ttfp_is_oblique(const ttfp_font *font);
+
+/**
+ * @brief Checks if font is a variable font.
+ */
+uint16_t ttfp_is_variable(const ttfp_font *font);
+
+/**
+ * @brief Returns font's width.
+ *
+ * @return A number in a 1..9 range. Returns \b 5 / Normal when OS/2 table is not present.
+ */
+uint16_t ttfp_get_width(const ttfp_font *font);
+
+/**
+ * @brief Returns font's x height.
+ *
+ * @return Font's x height or 0 when OS/2 table is not present.
+ */
+int16_t ttfp_get_x_height(const ttfp_font *font);
+
+/**
+ * @brief Returns font's underline metrics.
+ *
+ * @return \b false when the \b post table is not present.
+ */
+bool ttfp_get_underline_metrics(const ttfp_font *font, ttfp_line_metrics *metrics);
+
+/**
+ * @brief Returns font's strikeout metrics.
+ *
+ * @return \b false when the \b OS/2 table is not present.
+ */
+bool ttfp_get_strikeout_metrics(const ttfp_font *font, ttfp_line_metrics *metrics);
+
+/**
+ * @brief Returns font's subscript metrics.
+ *
+ * @return \b false when the \b OS/2 table is not present.
+ */
+bool ttfp_get_subscript_metrics(const ttfp_font *font, ttfp_script_metrics *metrics);
+
+/**
+ * @brief Returns font's superscript metrics.
+ *
+ * @return \b false when the \b OS/2 table is not present.
+ */
+bool ttfp_get_superscript_metrics(const ttfp_font *font, ttfp_script_metrics *metrics);
+
 
 /**
  * @brief Resolves a Glyph ID for a code point.
@@ -286,31 +379,6 @@ uint16_t ttfp_get_glyph_mark_attachment_class(const ttfp_font *font, uint16_t gl
 bool ttfp_is_mark_glyph(const ttfp_font *font, uint16_t glyph_id);
 
 /**
- * @brief Returns the number of name records in the font.
- */
-uint16_t ttfp_get_name_records_count(const ttfp_font *font);
-
-/**
- * @brief Returns a name record.
- *
- * @param Record's index. The total count can be obtained via #ttfp_get_name_records_count.
- * @return \b false when \b index is out of range or \b platform_id is invalid.
- */
-bool ttfp_get_name_record(const ttfp_font *font, uint16_t index, ttfp_name_record *record);
-
-/**
- * @brief Returns a name record's string.
- *
- * @param name A string buffer that will be filled with the record's name.
- *             Remember that a name will use encoding specified in \b ttfp_name_record.encoding_id
- *             Because of that, the name will not be null-terminated.
- * @param name_size Size of the string buffer. Must be equal to \b ttfp_name_record.name_sizeq
- * @return \b false when \b index is out of range or string buffer is not equal
- *         \b ttfp_name_record.name_size.
- */
-bool ttfp_get_name_record_string(const ttfp_font *font, uint16_t index, char *name, size_t name_size);
-
-/**
  * @brief Returns font's units per EM.
  *
  * @return A valid value in a 16..16384 range or 0 otherwise.
@@ -344,75 +412,6 @@ int16_t ttfp_get_height(const ttfp_font *font);
  * This function never fails.
  */
 int16_t ttfp_get_line_gap(const ttfp_font *font);
-
-/**
- * @brief Checks that font is marked as \b Regular.
- */
-bool ttfp_is_regular(const ttfp_font *font);
-
-/**
- * @brief Checks that font is marked as \b Italic.
- */
-bool ttfp_is_italic(const ttfp_font *font);
-
-/**
- * @brief Checks that font is marked as \b Bold.
- */
-bool ttfp_is_bold(const ttfp_font *font);
-
-/**
- * @brief Checks that font is marked as \b Oblique.
- */
-bool ttfp_is_oblique(const ttfp_font *font);
-
-/**
- * @brief Returns font's weight.
- *
- * @return Returns \b 400 / Normal when OS/2 table is not present.
- */
-uint16_t ttfp_get_weight(const ttfp_font *font);
-
-/**
- * @brief Returns font's width.
- *
- * @return A number in a 1..9 range. Returns \b 5 / Normal when OS/2 table is not present.
- */
-uint16_t ttfp_get_width(const ttfp_font *font);
-
-/**
- * @brief Returns font's x height.
- *
- * @return Font's x height or 0 when OS/2 table is not present.
- */
-int16_t ttfp_get_x_height(const ttfp_font *font);
-
-/**
- * @brief Returns font's underline metrics.
- *
- * @return \b false when the \b post table is not present.
- */
-bool ttfp_get_underline_metrics(const ttfp_font *font, ttfp_line_metrics *metrics);
-
-/**
- * @brief Returns font's strikeout metrics.
- *
- * @return \b false when the \b OS/2 table is not present.
- */
-bool ttfp_get_strikeout_metrics(const ttfp_font *font, ttfp_line_metrics *metrics);
-
-/**
- * @brief Returns font's subscript metrics.
- *
- * @return \b false when the \b OS/2 table is not present.
- */
-bool ttfp_get_subscript_metrics(const ttfp_font *font, ttfp_script_metrics *metrics);
-
-/**
- * @brief Returns font's superscript metrics.
- *
- * @return \b false when the \b OS/2 table is not present.
- */
-bool ttfp_get_superscript_metrics(const ttfp_font *font, ttfp_script_metrics *metrics);
 
 /**
  * @brief Returns a total number of glyphs in the font.
