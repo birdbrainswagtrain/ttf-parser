@@ -343,7 +343,7 @@ uint16_t ttfp_get_glyph_index(const ttfp_font *font, uint32_t codepoint);
 uint16_t ttfp_get_glyph_var_index(const ttfp_font *font, uint32_t codepoint, uint32_t variation);
 
 /**
- * @brief Returns glyph's advance using.
+ * @brief Returns glyph's advance.
  *
  * Supports both horizontal and vertical fonts.
  *
@@ -352,7 +352,7 @@ uint16_t ttfp_get_glyph_var_index(const ttfp_font *font, uint32_t codepoint, uin
 uint16_t ttfp_get_glyph_advance(const ttfp_font *font, uint16_t glyph_id);
 
 /**
- * @brief Returns glyph's side bearing using.
+ * @brief Returns glyph's side bearing.
  *
  * Supports both horizontal and vertical fonts.
  *
