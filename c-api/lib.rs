@@ -285,24 +285,32 @@ pub extern "C" fn ttfp_get_width(font: *const ttfp_font) -> u16 {
 }
 
 /// @brief Returns font's ascender value.
+///
+/// This function is affected by variation axes.
 #[no_mangle]
 pub extern "C" fn ttfp_get_ascender(font: *const ttfp_font) -> i16 {
     font_from_ptr(font).ascender()
 }
 
 /// @brief Returns font's descender value.
+///
+/// This function is affected by variation axes.
 #[no_mangle]
 pub extern "C" fn ttfp_get_descender(font: *const ttfp_font) -> i16 {
     font_from_ptr(font).descender()
 }
 
 /// @brief Returns font's height.
+///
+/// This function is affected by variation axes.
 #[no_mangle]
 pub extern "C" fn ttfp_get_height(font: *const ttfp_font) -> i16 {
     font_from_ptr(font).height()
 }
 
 /// @brief Returns font's line gap.
+///
+/// This function is affected by variation axes.
 #[no_mangle]
 pub extern "C" fn ttfp_get_line_gap(font: *const ttfp_font) -> i16 {
     font_from_ptr(font).line_gap()
@@ -318,6 +326,8 @@ pub extern "C" fn ttfp_get_units_per_em(font: *const ttfp_font) -> u16 {
 
 /// @brief Returns font's x height.
 ///
+/// This function is affected by variation axes.
+///
 /// @return x height or 0 when OS/2 table is not present or when its version is < 2.
 #[no_mangle]
 pub extern "C" fn ttfp_get_x_height(font: *const ttfp_font) -> i16 {
@@ -325,6 +335,10 @@ pub extern "C" fn ttfp_get_x_height(font: *const ttfp_font) -> i16 {
 }
 
 /// @brief Returns font's underline metrics.
+///
+/// This function is affected by variation axes.
+///
+/// @return `false` when `post` table is not present.
 #[no_mangle]
 pub extern "C" fn ttfp_get_underline_metrics(
     font: *const ttfp_font,
@@ -340,6 +354,8 @@ pub extern "C" fn ttfp_get_underline_metrics(
 }
 
 /// @brief Returns font's strikeout metrics.
+///
+/// This function is affected by variation axes.
 ///
 /// @return `false` when OS/2 table is not present.
 #[no_mangle]
@@ -358,6 +374,8 @@ pub extern "C" fn ttfp_get_strikeout_metrics(
 
 /// @brief Returns font's subscript metrics.
 ///
+/// This function is affected by variation axes.
+///
 /// @return `false` when OS/2 table is not present.
 #[no_mangle]
 pub extern "C" fn ttfp_get_subscript_metrics(
@@ -374,6 +392,8 @@ pub extern "C" fn ttfp_get_subscript_metrics(
 }
 
 /// @brief Returns font's superscript metrics.
+///
+/// This function is affected by variation axes.
 ///
 /// @return `false` when OS/2 table is not present.
 #[no_mangle]
@@ -602,6 +622,44 @@ pub extern "C" fn ttfp_get_glyph_bbox(
             None => false,
         }
     }).unwrap_or(false)
+}
+
+/// @brief Returns the amount of variation axes.
+#[no_mangle]
+pub extern "C" fn ttfp_get_variation_axes_count(font: *const ttfp_font) -> u16 {
+    font_from_ptr(font).variation_axes().count() as u16
+}
+
+/// @brief Returns a variation axis by index.
+#[no_mangle]
+pub extern "C" fn ttfp_get_variation_axis(
+    font: *const ttfp_font,
+    index: u16,
+    axis: *mut ttf_parser::VariationAxis,
+) -> bool {
+    match font_from_ptr(font).variation_axes().nth(index as usize) {
+        Some(a) => {
+            unsafe { *axis = a };
+            true
+        }
+        None => false,
+    }
+}
+
+/// @brief Returns a variation axis by tag.
+#[no_mangle]
+pub extern "C" fn ttfp_get_variation_axis_by_tag(
+    font: *const ttfp_font,
+    tag: ttf_parser::Tag,
+    axis: *mut ttf_parser::VariationAxis,
+) -> bool {
+    match font_from_ptr(font).variation_axes().find(|axis| axis.tag == tag) {
+        Some(a) => {
+            unsafe { *axis = a };
+            true
+        }
+        None => false,
+    }
 }
 
 /// @brief Sets a variation axis coordinate.

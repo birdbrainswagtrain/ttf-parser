@@ -62,7 +62,7 @@ void TtfParserFont::open(const QString &path, const quint32 index)
     file.open(QFile::ReadOnly);
     m_fontData = file.readAll();
 
-    m_font = ttfp_create_font((const uint8_t *)m_fontData.constData(), m_fontData.size(), index);
+    m_font = ttfp_create_font(m_fontData.constData(), m_fontData.size(), index);
 
     if (!m_font) {
         throw tr("Failed to open a font.");
@@ -101,15 +101,13 @@ Glyph TtfParserFont::outline(const quint16 gid) const
     builder.curve_to = outliner.curveToFn;
     builder.close_path = outliner.closePathFn;
 
-    ttfp_bbox rawBbox;
+    ttfp_rect rawBbox;
 
-    const bool ok = ttfp_outline_variable_glyph(
+    const bool ok = ttfp_outline_glyph(
         m_font,
         builder,
         &outliner,
         gid,
-        m_variationCoords.constData(),
-        m_variationCoords.size(),
         &rawBbox
     );
 
@@ -147,7 +145,7 @@ QVector<VariationInfo> TtfParserFont::loadVariations()
 
     QVector<VariationInfo> variations;
 
-    for (uint16_t i = 0; i < ttfp_variation_axes_count(m_font); ++i) {
+    for (uint16_t i = 0; i < ttfp_get_variation_axes_count(m_font); ++i) {
         ttfp_variation_axis axis;
         ttfp_get_variation_axis(m_font, i, &axis);
 
@@ -169,32 +167,7 @@ void TtfParserFont::setVariations(const QVector<Variation> &variations)
         throw tr("Font is not loaded.");
     }
 
-    QVector<qint16> coords;
-    coords.fill(0, variations.size());
-
-    int i = 0;
     for (const auto &variation : variations) {
-        ttfp_variation_axis axis;
-        if (ttfp_get_variation_axis_by_tag(m_font, variation.tag.value, &axis)) {
-            auto v = qBound(axis.min_value, (float)variation.value, axis.max_value);
-
-            if (qFuzzyCompare(v, axis.def_value)) {
-                v = 0.0;
-            } else if (v < axis.def_value) {
-                v = (v - axis.def_value) / (axis.def_value - axis.min_value);
-            } else {
-                v = (v - axis.def_value) / (axis.max_value - axis.def_value);
-            }
-
-            coords[i] = qRound(v * 16384.0f);
-        } else {
-            throw tr("No variation axis in the font.");
-        }
-
-        i += 1;
+        ttfp_set_variation(m_font, variation.tag.value, variation.value);
     }
-
-    ttfp_map_variation_coordinates(m_font, coords.data(), coords.size());
-
-    m_variationCoords = coords;
 }
