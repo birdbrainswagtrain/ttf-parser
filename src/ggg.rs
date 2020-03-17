@@ -465,7 +465,7 @@ impl<'a> FeatureVariation<'a> {
     /// Evaluates variation using specified `coordinates`.
     ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
-    pub fn evaluate(&self, coordinates: &[NormalizedCoord]) -> bool {
+    pub(crate) fn evaluate(&self, coordinates: &[NormalizedCoord]) -> bool {
         for condition in try_opt_or!(self.condition_set(), false) {
             if !condition.evaluate(coordinates) {
                 return false;

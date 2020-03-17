@@ -144,7 +144,7 @@ pub(crate) fn parse_metadata(data: &[u8]) -> Option<Metadata> {
 }
 
 
-pub fn outline(
+pub(crate) fn outline(
     metadata: &Metadata,
     coordinates: &[NormalizedCoord],
     glyph_id: GlyphId,

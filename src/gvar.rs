@@ -111,7 +111,7 @@ impl<'a> Table<'a> {
 }
 
 
-pub fn outline(
+pub(crate) fn outline(
     loca_table: loca::Table,
     glyf_table: &[u8],
     gvar_table: &Table,

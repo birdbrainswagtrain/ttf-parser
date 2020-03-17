@@ -3,15 +3,44 @@
 use crate::{GlyphId, NormalizedCoord};
 use crate::parser::{Stream, Offset, Offset32};
 
+#[derive(Clone, Copy)]
+pub struct Table<'a> {
+    data: &'a [u8],
+    variation_store_offset: Offset32,
+    advance_width_mapping_offset: Option<Offset32>,
+    lsb_mapping_offset: Option<Offset32>,
+}
+
+impl<'a> Table<'a> {
+    pub fn parse(data: &'a [u8]) -> Option<Self> {
+        let mut s = Stream::new(data);
+
+        let version: u32 = s.read()?;
+        if version != 0x00010000 {
+            return None;
+        }
+
+        Some(Table {
+            data,
+            variation_store_offset: s.read()?,
+            advance_width_mapping_offset: s.read()?,
+            lsb_mapping_offset: s.read()?,
+        })
+    }
+}
+
+
 pub struct DeltaSetIndexMap<'a> {
     data: &'a [u8],
 }
 
 impl<'a> DeltaSetIndexMap<'a> {
+    #[inline]
     pub fn new(data: &'a [u8]) -> Self {
         DeltaSetIndexMap { data }
     }
 
+    #[inline]
     pub fn map(&self, glyph_id: GlyphId) -> Option<(u16, u16)> {
         let mut idx = glyph_id.0;
 
@@ -44,51 +73,33 @@ impl<'a> DeltaSetIndexMap<'a> {
     }
 }
 
-pub fn glyph_advance_variation(
-    data: &[u8], // HVAR or VVAR
+#[inline]
+pub(crate) fn glyph_advance_offset(
+    table: Table,
     glyph_id: GlyphId,
     coordinates: &[NormalizedCoord],
 ) -> Option<f32> {
-    let mut s = Stream::new(data);
-
-    let version: u32 = s.read()?;
-    if version != 0x00010000 {
-        return None;
-    }
-
-    let variation_store_offset: Offset32 = s.read()?;
-    let advance_width_mapping_offset: Option<Offset32> = s.read()?;
-
-    let (outer_idx, inner_idx) = if let Some(offset) = advance_width_mapping_offset {
-        DeltaSetIndexMap::new(data.get(offset.to_usize()..)?).map(glyph_id)?
+    let (outer_idx, inner_idx) = if let Some(offset) = table.advance_width_mapping_offset {
+        DeltaSetIndexMap::new(table.data.get(offset.to_usize()..)?).map(glyph_id)?
     } else {
         let outer_index = glyph_id.0 as u32 >> 16;
         let inner_index = glyph_id.0 as u32 & 0xFFFF;
         (outer_index as u16, inner_index as u16)
     };
 
-    let mut s2 = Stream::new_at(data, variation_store_offset.to_usize());
+    let mut s2 = Stream::new_at(table.data, table.variation_store_offset.to_usize());
     crate::mvar::parse_item_variation_store(outer_idx, inner_idx, coordinates, &mut s2)
 }
 
-pub fn glyph_side_bearing_variation(
-    data: &[u8], // HVAR or VVAR
+#[inline]
+pub(crate) fn glyph_side_bearing_offset(
+    table: Table,
     glyph_id: GlyphId,
     coordinates: &[NormalizedCoord],
 ) -> Option<f32> {
-    let mut s = Stream::new(data);
-
-    let version: u32 = s.read()?;
-    if version != 0x00010000 {
-        return None;
-    }
-
-    let variation_store_offset: Offset32 = s.read()?;
-    s.skip::<Offset32>();
-    let lsb_mapping_offset = s.read::<Option<Offset32>>()??;
-    let set_data = data.get(lsb_mapping_offset.to_usize()..)?;
+    let set_data = table.data.get(table.lsb_mapping_offset?.to_usize()..)?;
     let (outer_idx, inner_idx) = DeltaSetIndexMap::new(set_data).map(glyph_id)?;
 
-    let mut s2 = Stream::new_at(data, variation_store_offset.to_usize());
+    let mut s2 = Stream::new_at(table.data, table.variation_store_offset.to_usize());
     crate::mvar::parse_item_variation_store(outer_idx, inner_idx, coordinates, &mut s2)
 }

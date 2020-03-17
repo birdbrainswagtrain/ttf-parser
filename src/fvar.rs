@@ -23,7 +23,7 @@ pub struct VariationAxis {
 
 impl VariationAxis {
     /// Returns a normalized variation coordinate for this axis.
-    pub fn normalized_value(&self, mut v: f32) -> NormalizedCoord {
+    pub(crate) fn normalized_value(&self, mut v: f32) -> NormalizedCoord {
         // Based on
         // https://docs.microsoft.com/en-us/typography/opentype/spec/avar#overview
 
@@ -72,6 +72,8 @@ impl<'a> Table<'a> {
     pub fn axes(&self) -> VariationAxes<'a> {
         VariationAxes { iter: self.axes.into_iter() }
     }
+
+    // TODO: add axis_by_tag
 }
 
 

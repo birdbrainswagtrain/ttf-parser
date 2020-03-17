@@ -5,7 +5,7 @@ use crate::parser::{Stream, Offset, Offset16, Offset32};
 use crate::raw::mvar as raw;
 
 
-pub fn metrics_variation(data: &[u8], tag: Tag, coordinates: &[NormalizedCoord]) -> Option<f32> {
+pub(crate) fn metrics_variation(data: &[u8], tag: Tag, coordinates: &[NormalizedCoord]) -> Option<f32> {
     let mut s = Stream::new(data);
 
     let version: u32 = s.read()?;
@@ -33,7 +33,7 @@ pub fn metrics_variation(data: &[u8], tag: Tag, coordinates: &[NormalizedCoord])
 }
 
 // TODO: merge with var_store
-pub fn parse_item_variation_store(
+pub(crate) fn parse_item_variation_store(
     outer_index: u16,
     inner_index: u16,
     coordinates: &[NormalizedCoord],

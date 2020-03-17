@@ -6,7 +6,10 @@ use crate::NormalizedCoord;
 use crate::parser::{Stream, LazyArray16};
 use crate::raw::avar as raw;
 
-pub fn map_variation_coordinates(data: &[u8], coordinates: &mut [NormalizedCoord]) -> Option<()> {
+pub(crate) fn map_variation_coordinates(
+    data: &[u8],
+    coordinates: &mut [NormalizedCoord],
+) -> Option<()> {
     let mut s = Stream::new(data);
 
     let version: u32 = s.read()?;

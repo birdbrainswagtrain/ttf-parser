@@ -12,7 +12,7 @@ pub struct VariationRegionList<'a> {
 }
 
 impl<'a> VariationRegionList<'a> {
-    pub fn evaluate_region(
+    pub(crate) fn evaluate_region(
         &self,
         index: u16,
         coordinates: &[NormalizedCoord],

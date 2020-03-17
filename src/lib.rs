@@ -13,7 +13,7 @@ Can be used as Rust and as C library.
 - Zero required dependencies. Logging is enabled by default.
 - `no_std` compatible.
 - Fast. Set the *Performance* section.
-- Stateless. No mutable methods.
+- Stateless. All parsing methods are immutable methods.
 - Simple and maintainable code (no magic numbers).
 
 ## Safety
@@ -94,30 +94,6 @@ Can be used as Rust and as C library.
 [glyph_mark_attachment_class()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_mark_attachment_class
 [is_mark_glyph()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.is_mark_glyph
 [glyph_y_origin()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_y_origin
-
-
-## Variable fonts
-
-The library has a complete support for variable font. You can access the variable data using:
-
-- (`gvar`) Variable glyph outlining using [outline_variable_glyph()] method.
-- (`CFF2`) Variable glyph outlining using [outline_variable_glyph()] method.
-- (`avar`) Variation coordinates normalization using [map_variation_coordinates()] method.
-- (`fvar`) Variation axes parsing using [variation_axes()] method.
-- (`HVAR`) Retrieving glyph's variation offset for horizontal advance using [glyph_hor_advance_variation()] method.
-- (`HVAR`) Retrieving glyph's variation offset for horizontal side bearing using [glyph_hor_side_bearing_variation()] method.
-- (`VVAR`) Retrieving glyph's variation offset for vertical advance using [glyph_ver_advance_variation()] method.
-- (`VVAR`) Retrieving glyph's variation offset for vertical side bearing using [glyph_ver_side_bearing_variation()] method.
-- (`MVAR`) Retrieving font's metrics variation using [metrics_variation()] method.
-
-[outline_variable_glyph()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.outline_variable_glyph
-[map_variation_coordinates()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.map_variation_coordinates
-[variation_axes()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.variation_axis
-[metrics_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.metrics_variation
-[glyph_hor_advance_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_hor_advance_variation
-[glyph_hor_side_bearing_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_hor_side_bearing_variation
-[glyph_ver_advance_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_ver_advance_variation
-[glyph_ver_side_bearing_variation()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_ver_side_bearing_variation
 
 ## Error handling
 
@@ -298,7 +274,7 @@ impl Default for GlyphId {
 /// The number is stored as f2.16
 #[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
-pub struct NormalizedCoord(i16);
+struct NormalizedCoord(i16);
 
 impl From<i16> for NormalizedCoord {
     /// Creates a new coordinate.
@@ -332,6 +308,24 @@ impl NormalizedCoord {
     pub fn get_fixed(self) -> f32 {
         self.0 as f32 / 16384.0
     }
+}
+
+
+/// A font variation value.
+///
+/// # Example
+///
+/// ```
+/// use ttf_parser::{Variation, Tag};
+///
+/// Variation { axis: Tag::from_bytes(b"wght"), value: 500.0 };
+/// ```
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub struct Variation {
+    /// An axis tag name.
+    pub axis: Tag,
+    /// An axis value.
+    pub value: f32,
 }
 
 
@@ -617,6 +611,28 @@ pub enum TableName {
 }
 
 
+const MAX_VAR_COORDS: u8 = 32;
+
+#[derive(Clone, Default)]
+struct VarCoords {
+    data: [NormalizedCoord; MAX_VAR_COORDS as usize],
+    len: u8,
+}
+
+impl VarCoords {
+    #[inline]
+    fn as_slice(&self) -> &[NormalizedCoord] {
+        &self.data[0..usize::from(self.len)]
+    }
+
+    #[inline]
+    fn as_mut_slice(&mut self) -> &mut [NormalizedCoord] {
+        let end = usize::from(self.len);
+        &mut self.data[0..end]
+    }
+}
+
+
 /// A font data handle.
 #[derive(Clone)]
 pub struct Font<'a> {
@@ -633,7 +649,7 @@ pub struct Font<'a> {
     head: raw::head::Table<'a>,
     hhea: raw::hhea::Table<'a>,
     hmtx: Option<hmtx::Table<'a>>,
-    hvar: Option<&'a [u8]>,
+    hvar: Option<hvar::Table<'a>>,
     kern: Option<&'a [u8]>,
     loca: Option<loca::Table<'a>>,
     mvar: Option<&'a [u8]>,
@@ -643,8 +659,9 @@ pub struct Font<'a> {
     vhea: Option<raw::vhea::Table<'a>>,
     vmtx: Option<hmtx::Table<'a>>,
     vorg: Option<vorg::Table<'a>>,
-    vvar: Option<&'a [u8]>,
+    vvar: Option<hvar::Table<'a>>,
     number_of_glyphs: NonZeroU16,
+    coordinates: VarCoords,
 }
 
 impl<'a> Font<'a> {
@@ -732,11 +749,11 @@ impl<'a> Font<'a> {
                 b"GDEF" => gdef = data.get(range).and_then(|data| gdef::Table::parse(data)),
                 b"GPOS" => gpos = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
                 b"GSUB" => gsub = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
-                b"HVAR" => hvar = data.get(range),
+                b"HVAR" => hvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
                 b"MVAR" => mvar = data.get(range),
                 b"OS/2" => os_2 = data.get(range).and_then(|data| os2::Table::parse(data)),
                 b"VORG" => vorg = data.get(range).and_then(|data| vorg::Table::parse(data)),
-                b"VVAR" => vvar = data.get(range),
+                b"VVAR" => vvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
                 b"avar" => avar = data.get(range),
                 b"cmap" => cmap = data.get(range).and_then(|data| cmap::Table::parse(data)),
                 b"fvar" => fvar = data.get(range).and_then(|data| fvar::Table::parse(data)),
@@ -761,6 +778,11 @@ impl<'a> Font<'a> {
         let hhea = hhea?;
         let maxp = maxp?;
         let number_of_glyphs = maxp.number_of_glyphs;
+
+        let mut coordinates = VarCoords::default();
+        if let Some(ref fvar) = fvar {
+            coordinates.len = fvar.axes().count().min(MAX_VAR_COORDS as usize) as u8;
+        }
 
         let mut font = Font {
             avar,
@@ -788,6 +810,7 @@ impl<'a> Font<'a> {
             vorg,
             vvar,
             number_of_glyphs,
+            coordinates,
         };
 
         if let Some(data) = hmtx {
@@ -1075,15 +1098,15 @@ impl<'a> Font<'a> {
         self.os_2.and_then(|os_2| os_2.superscript_metrics())
     }
 
-    /// Returns metrics variation offset using
-    /// [Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/mvar).
-    ///
-    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
-    ///
-    /// Returns `None` when `MVAR` table is not present or invalid.
-    pub fn metrics_variation(&self, tag: Tag, coordinates: &[NormalizedCoord]) -> Option<f32> {
-        mvar::metrics_variation(self.mvar?, tag, coordinates)
-    }
+    // /// Returns metrics variation offset using
+    // /// [Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/mvar).
+    // ///
+    // /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
+    // ///
+    // /// Returns `None` when `MVAR` table is not present or invalid.
+    // pub fn metrics_variation(&self, tag: Tag, coordinates: &[NormalizedCoord]) -> Option<f32> {
+    //     mvar::metrics_variation(self.mvar?, tag, coordinates)
+    // }
 
     /// Returns a total number of glyphs in the font.
     ///
@@ -1099,15 +1122,6 @@ impl<'a> Font<'a> {
     #[inline]
     pub fn variation_axes(&self) -> VariationAxes {
         self.fvar.map(|fvar| fvar.axes()).unwrap_or_default()
-    }
-
-    /// Performs normalization mapping to variation coordinates
-    /// using [Axis Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/avar).
-    ///
-    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
-    #[inline]
-    pub fn map_variation_coordinates(&self, coordinates: &mut [NormalizedCoord]) -> Option<()> {
-        avar::map_variation_coordinates(self.avar?, coordinates)
     }
 
     /// Resolves a Glyph ID for a code point.
@@ -1137,61 +1151,44 @@ impl<'a> Font<'a> {
     /// Returns glyph's advance.
     ///
     /// Supports both horizontal and vertical fonts.
+    ///
+    /// This method is affected by variation axes.
     #[inline]
-    pub fn glyph_advance(&self, glyph_id: GlyphId) -> Option<u16> {
-        if self.is_vertical() {
+    pub fn glyph_advance(&self, glyph_id: GlyphId) -> Option<f32> {
+        let mut advance = if self.is_vertical() {
             self.vmtx.and_then(|vmtx| vmtx.advance(glyph_id))
         } else {
             self.hmtx.and_then(|hmtx| hmtx.advance(glyph_id))
+        }? as f32;
+
+        if self.is_variable() {
+            let data = if self.is_vertical() { self.vvar } else { self.hvar };
+            advance += hvar::glyph_advance_offset(data?, glyph_id, self.coordinates.as_slice())?;
         }
+
+        Some(advance)
     }
 
     /// Returns glyph's side bearing.
     ///
     /// Supports both horizontal and vertical fonts.
-    #[inline]
-    pub fn glyph_side_bearing(&self, glyph_id: GlyphId) -> Option<i16> {
-        if self.is_vertical() {
-            self.vmtx.and_then(|vmtx| vmtx.side_bearing(glyph_id))
-        } else {
-            self.hmtx.and_then(|hmtx| hmtx.side_bearing(glyph_id))
-        }
-    }
-
-    /// Returns glyph's advance variation offset.
     ///
-    /// Supports both horizontal and vertical fonts.
+    /// This method is affected by variation axes.
     #[inline]
-    pub fn glyph_advance_variation(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[NormalizedCoord],
-    ) -> Option<f32> {
-        if let Some(hvar) = self.hvar {
-            hvar::glyph_advance_variation(hvar, glyph_id, coordinates)
-        } else if let Some(vvar) = self.vvar {
-            hvar::glyph_advance_variation(vvar, glyph_id, coordinates)
+    pub fn glyph_side_bearing(&self, glyph_id: GlyphId) -> Option<f32> {
+        let mut bearing = if self.is_vertical() {
+            self.vmtx.and_then(|vmtx| vmtx.advance(glyph_id))
         } else {
-            None
-        }
-    }
+            self.hmtx.and_then(|hmtx| hmtx.advance(glyph_id))
+        }? as f32;
 
-    /// Returns glyph's side bearing variation offset.
-    ///
-    /// Supports both horizontal and vertical fonts.
-    #[inline]
-    pub fn glyph_side_bearing_variation(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[NormalizedCoord],
-    ) -> Option<f32> {
-        if let Some(hvar) = self.hvar {
-            hvar::glyph_side_bearing_variation(hvar, glyph_id, coordinates)
-        } else if let Some(vvar) = self.vvar {
-            hvar::glyph_side_bearing_variation(vvar, glyph_id, coordinates)
-        } else {
-            None
+        if self.is_variable() {
+            let data = if self.is_vertical() { self.vvar } else { self.hvar };
+            bearing += hvar::glyph_side_bearing_offset(data?, glyph_id,
+                                                       self.coordinates.as_slice())?;
         }
+
+        Some(bearing)
     }
 
     /// Returns a vertical origin of a glyph according to
@@ -1269,8 +1266,9 @@ impl<'a> Font<'a> {
     /// You must check `outline_glyph()` result before using
     /// `OutlineBuilder`'s output.
     ///
-    /// This method supports `glyf`, `CFF` and `CFF2` tables.
-    /// In case of a variable font, the default variation coordinates will be used.
+    /// `glyf`, `gvar`, `CFF` and `CFF2` tables are supported.
+    ///
+    /// This method is affected by variation axes.
     ///
     /// Returns `None` when glyph has no outline or on error.
     ///
@@ -1317,6 +1315,11 @@ impl<'a> Font<'a> {
         glyph_id: GlyphId,
         builder: &mut dyn OutlineBuilder,
     ) -> Option<Rect> {
+        if let Some(ref gvar_table) = self.gvar {
+            return gvar::outline(self.loca?, self.glyf?, gvar_table,
+                                 self.coordinates.as_slice(), glyph_id, builder);
+        }
+
         if let Some(glyf_table) = self.glyf {
             return glyf::outline(self.loca?, glyf_table, glyph_id, builder);
         }
@@ -1326,46 +1329,7 @@ impl<'a> Font<'a> {
         }
 
         if let Some(ref metadata) = self.cff2 {
-            let mut coordinates = [NormalizedCoord::default(); 64]; // 64 is more than enough.
-            let coords_len = self.fvar?.axes().count();
-            if coords_len >= 64 {
-                return None;
-            }
-
-            let coordinates = &mut coordinates[0..coords_len];
-            return cff2::outline(metadata, coordinates, glyph_id, builder);
-        }
-
-        None
-    }
-
-    /// Outlines a variable glyph and returns its tight bounding box.
-    ///
-    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
-    ///
-    /// **Warning**: since `ttf-parser` is a pull parser,
-    /// `OutlineBuilder` will emit segments even when outline is partially malformed.
-    /// You must check `outline_variable_glyph()` result before using
-    /// `OutlineBuilder`'s output.
-    ///
-    /// This method supports `glyf`+`gvar` and `CFF2` tables.
-    ///
-    /// Returns `None` when glyph has no outline, when font is not variable
-    /// or on error.
-    #[inline]
-    pub fn outline_variable_glyph(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[NormalizedCoord],
-        builder: &mut dyn OutlineBuilder,
-    ) -> Option<Rect> {
-        if let Some(ref gvar_table) = self.gvar {
-            return gvar::outline(self.loca?, self.glyf?, gvar_table,
-                                 coordinates, glyph_id, builder);
-        }
-
-        if let Some(ref metadata) = self.cff2 {
-            return cff2::outline(metadata, coordinates, glyph_id, builder);
+            return cff2::outline(metadata, self.coordinates.as_slice(), glyph_id, builder);
         }
 
         None
@@ -1373,52 +1337,53 @@ impl<'a> Font<'a> {
 
     /// Returns a tight glyph bounding box.
     ///
-    /// Note that this method's performance depends on a table type the current font is using.
-    /// In case of a `glyf` table, it's basically free, since this table stores
-    /// bounding box separately. In case of `CFF` we should actually outline
-    /// a glyph and then calculate its bounding box. So if you need an outline and
-    /// a bounding box and you have an OpenType font (which uses CFF)
-    /// then prefer `outline_glyph()` method.
+    /// Unless the current font has a `glyf` table, this is just a shorthand for `outline_glyph()`
+    /// since only the `glyf` table stores a bounding box. In case of CFF and variable fonts
+    /// we have to actually outline a glyph to find it's bounding box.
     ///
-    /// This method supports `glyf`, `CFF` and `CFF2` tables.
-    /// In case of a variable font, the default variation coordinates will be used.
+    /// This method is affected by variation axes.
     #[inline]
     pub fn glyph_bounding_box(&self, glyph_id: GlyphId) -> Option<Rect> {
         if let Some(glyf_table) = self.glyf {
             return glyf::glyph_bbox(self.loca?, glyf_table, glyph_id);
         }
 
-        if let Some(ref metadata) = self.cff_ {
-            return cff::outline(metadata, glyph_id, &mut DummyOutline);
+        self.outline_glyph(glyph_id, &mut DummyOutline)
+    }
+
+    /// Sets a variation axis coordinate.
+    ///
+    /// This is the only mutable method in the library.
+    /// We can simplify the API a lot by storing the variable coordinates
+    /// in the font object itself.
+    ///
+    /// Returns `None` when:
+    /// - font is not variable
+    /// - font doesn't have such axis
+    pub fn set_variation(&mut self, axis: Tag, value: f32) -> Option<()> {
+        if !self.is_variable() {
+            return None;
         }
 
-        if let Some(ref metadata) = self.cff2 {
-            let mut coordinates = [NormalizedCoord::default(); 64]; // 64 is more than enough.
-            let coords_len = self.fvar?.axes().count();
-            if coords_len >= 64 {
+        let v = self.variation_axes().enumerate().find(|(_, a)| a.tag == axis);
+        if let Some((idx, a)) = v {
+            if idx >= usize::from(MAX_VAR_COORDS) {
                 return None;
             }
 
-            let coordinates = &mut coordinates[0..coords_len];
-            return cff2::outline(metadata, coordinates, glyph_id, &mut DummyOutline);
+            self.coordinates.data[idx] = a.normalized_value(value);
+        } else {
+            warn!("Font doesn't have a '{}' axis.", axis);
+            return None;
         }
 
-        None
-    }
+        // TODO: optimize
+        if let Some(avar) = self.avar {
+            // Ignore error.
+            let _ = avar::map_variation_coordinates(avar, self.coordinates.as_mut_slice());
+        }
 
-    /// Returns a tight bounding box for a variable glyph.
-    ///
-    /// This is just a `outline_variable_glyph()` shorthand, since we have to outline
-    /// the glyph in case of a variable font to get its bounding box.
-    ///
-    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
-    #[inline]
-    pub fn variable_glyph_bounding_box(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[NormalizedCoord],
-    ) -> Option<Rect> {
-        self.outline_variable_glyph(glyph_id, coordinates, &mut DummyOutline)
+        Some(())
     }
 }
 

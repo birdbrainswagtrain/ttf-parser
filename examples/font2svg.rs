@@ -2,7 +2,6 @@ use std::path::PathBuf;
 
 use ttf_parser as ttf;
 use svgtypes::WriteBuffer;
-use log::warn;
 
 const FONT_SIZE: f64 = 128.0;
 const COLUMNS: u32 = 100;
@@ -13,13 +12,8 @@ Usage:
     font2svg --variations 'wght:500;wdth:200' font.ttf out.svg
 ";
 
-struct Variation {
-    tag: ttf::Tag,
-    value: f32,
-}
-
 struct Args {
-    variations: Option<Vec<Variation>>,
+    variations: Vec<ttf::Variation>,
     ttf_path: PathBuf,
     svg_path: PathBuf,
 }
@@ -58,24 +52,24 @@ fn parse_args() -> Result<Args, Box<dyn std::error::Error>> {
     }
 
     Ok(Args {
-        variations,
+        variations: variations.unwrap_or_default(),
         ttf_path: PathBuf::from(&free[0]),
         svg_path: PathBuf::from(&free[1]),
     })
 }
 
-fn parse_variations(s: &str) -> Result<Vec<Variation>, &'static str> {
+fn parse_variations(s: &str) -> Result<Vec<ttf::Variation>, &'static str> {
     let mut variations = Vec::new();
     for part in s.split(';') {
         let mut iter = part.split(':');
 
-        let tag = iter.next().ok_or("failed to parse a variation")?;
-        let tag = ttf::Tag::from_bytes_lossy(tag.as_bytes());
+        let axis = iter.next().ok_or("failed to parse a variation")?;
+        let axis = ttf::Tag::from_bytes_lossy(axis.as_bytes());
 
         let value = iter.next().ok_or("failed to parse a variation")?;
         let value: f32 = value.parse().map_err(|_| "failed to parse a variation")?;
 
-        variations.push(Variation { tag, value });
+        variations.push(ttf::Variation { axis, value });
     }
 
     Ok(variations)
@@ -87,37 +81,19 @@ fn process(args: Args) -> Result<(), Box<dyn std::error::Error>> {
     // Exclude IO operations.
     let now = std::time::Instant::now();
 
-    let font = ttf::Font::from_data(&font_data, 0).ok_or("failed to open a font")?;
+    let mut font = ttf::Font::from_data(&font_data, 0).ok_or("failed to open a font")?;
+    if font.is_variable() {
+        for variation in args.variations {
+            font.set_variation(variation.axis, variation.value)
+                .ok_or("failed to create variation coordinates")?;
+        }
+    }
+
     let units_per_em = font.units_per_em().ok_or("invalid units per em")?;
     let scale = FONT_SIZE / units_per_em as f64;
 
     let cell_size = font.height() as f64 * FONT_SIZE / units_per_em as f64;
     let rows = (font.number_of_glyphs() as f64 / COLUMNS as f64).ceil() as u32;
-
-    let var_coords = if font.is_variable() {
-        let coords_len = font.variation_axes().count();
-        let mut coords = vec![ttf::NormalizedCoord::from(0); coords_len];
-
-        if let Some(variations) = args.variations {
-            for variation in variations {
-                let v = font.variation_axes().enumerate().find(|(_, axis)| axis.tag == variation.tag);
-                if let Some((idx, axis)) = v {
-                    coords[idx] = axis.normalized_value(variation.value);
-                } else {
-                    warn!("Font doesn't have a '{}' axis.", variation.tag);
-                }
-            }
-
-            if font.has_table(ttf::TableName::AxisVariations) {
-                font.map_variation_coordinates(&mut coords)
-                    .ok_or("failed to map variation coordinates")?;
-            }
-        }
-
-        coords
-    } else {
-        Vec::new()
-    };
 
     let mut svg = xmlwriter::XmlWriter::with_capacity(
         font.number_of_glyphs() as usize * 512,
@@ -143,7 +119,6 @@ fn process(args: Args) -> Result<(), Box<dyn std::error::Error>> {
             ttf::GlyphId(id),
             cell_size,
             scale,
-            &var_coords,
             &mut svg,
             &mut path_buf,
         );
@@ -205,7 +180,6 @@ fn glyph_to_path(
     glyph_id: ttf::GlyphId,
     cell_size: f64,
     scale: f64,
-    var_coords: &[ttf::NormalizedCoord],
     svg: &mut xmlwriter::XmlWriter,
     path_buf: &mut svgtypes::Path,
 ) {
@@ -219,16 +193,9 @@ fn glyph_to_path(
 
     path_buf.clear();
     let mut builder = Builder(path_buf);
-    let bbox = if font.is_variable() {
-        match font.outline_variable_glyph(glyph_id, var_coords, &mut builder) {
-            Some(v) => v,
-            None => return,
-        }
-    } else {
-        match font.outline_glyph(glyph_id, &mut builder) {
-            Some(v) => v,
-            None => return,
-        }
+    let bbox = match font.outline_glyph(glyph_id, &mut builder) {
+        Some(v) => v,
+        None => return,
     };
 
     let bbox_w = (bbox.x_max as f64 - bbox.x_min as f64) * scale;

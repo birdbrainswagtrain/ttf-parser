@@ -6,19 +6,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
 ### Added
+- Variable fonts support.
 - C API.
-- `Font::outline_variable_glyph` with `glyf`+`gvar` and `CFF2` support.
-- `Font::variable_glyph_bounding_box`.
+- `gvar`, `CFF2`, `avar`, `fvar`, `HVAR`, `VVAR` and `MVAR` tables support.
 - `Font::variation_axes`
-- `Font::map_variation_coordinates`
-- `Font::metrics_variation`
-- `Font::glyph_hor_advance_variation`
-- `Font::glyph_hor_side_bearing_variation`
-- `Font::glyph_ver_advance_variation`
-- `Font::glyph_ver_side_bearing_variation`
+- `Font::set_variation`
 - `Font::is_vertical`
+- `Font::is_variable`
 - `Tag` type.
 - Initial GSUB/GPOS support.
+
+### Changed
+- `glyph_advance`, `glyph_side_bearing` methods will return `f32` now
+  due to variable fonts.
 
 ### Removed
 - `Font::vertical_ascender`. Use `Font::ascender` instead.
