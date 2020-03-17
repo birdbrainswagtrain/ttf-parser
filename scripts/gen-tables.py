@@ -206,7 +206,7 @@ class TtfFixed(TtfType):
     def print(self, offset: int) -> None:
         print(f'(i32::from_be_bytes(['
               f'    self.data[{offset}], self.data[{offset + 1}], self.data[{offset + 2}], self.data[{offset + 3}]'
-              f']) / 65536) as f32')
+              f']) as f32 / 65536.0)')
 
 
 # unsupported
