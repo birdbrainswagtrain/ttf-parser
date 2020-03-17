@@ -100,7 +100,7 @@ mod var_store;
 #[cfg(feature = "std")]
 mod writer;
 
-use parser::{Stream, SafeStream, Offset, i16_bound, f32_bound};
+use parser::{Stream, SafeStream, Offset, TryNumConv, i16_bound, f32_bound};
 pub use fvar::{VariationAxes, VariationAxis};
 pub use gdef::GlyphClass;
 pub use ggg::*;
@@ -113,7 +113,7 @@ pub use parser::{FromData, ArraySize, LazyArray, LazyArray16, LazyArray32, LazyA
 
 /// A type-safe wrapper for glyph ID.
 #[repr(transparent)]
-#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Debug)]
+#[derive(Clone, Copy, Ord, PartialOrd, Eq, PartialEq, Default, Debug)]
 pub struct GlyphId(pub u16);
 
 impl FromData for GlyphId {
@@ -124,12 +124,6 @@ impl FromData for GlyphId {
     }
 }
 
-impl Default for GlyphId {
-    fn default() -> Self {
-        GlyphId(0)
-    }
-}
-
 
 /// A variation coordinate in a normalized coordinate system.
 ///
@@ -137,7 +131,6 @@ impl Default for GlyphId {
 /// Where 0 is a default value.
 ///
 /// The number is stored as f2.16
-#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
 struct NormalizedCoord(i16);
 
@@ -164,14 +157,8 @@ impl From<f32> for NormalizedCoord {
 impl NormalizedCoord {
     /// Returns the coordinate value as f2.14.
     #[inline]
-    pub fn get(self) -> i16 {
+    fn get(self) -> i16 {
         self.0
-    }
-
-    /// Returns the coordinate value as `f32`.
-    #[inline]
-    pub fn get_fixed(self) -> f32 {
-        self.0 as f32 / 16384.0
     }
 }
 
@@ -201,6 +188,7 @@ pub struct Tag(pub u32);
 
 impl Tag {
     /// Creates a `Tag` from bytes.
+    #[inline]
     pub const fn from_bytes(bytes: &[u8; 4]) -> Self {
         Tag(((bytes[0] as u32) << 24) | ((bytes[1] as u32) << 16) |
             ((bytes[2] as u32) << 8) | (bytes[3] as u32))
@@ -213,6 +201,7 @@ impl Tag {
     /// When `bytes` are shorter than 4, will set missing bytes to ` `.
     ///
     /// Data after first 4 bytes is ignored.
+    #[inline]
     pub fn from_bytes_lossy(bytes: &[u8]) -> Self {
         if bytes.is_empty() {
             return Tag::from_bytes(&[0, 0, 0, 0]);
@@ -228,6 +217,7 @@ impl Tag {
     }
 
     /// Returns tag as 4-element byte array.
+    #[inline]
     pub const fn to_bytes(self) -> [u8; 4] {
         [
             (self.0 >> 24 & 0xff) as u8,
@@ -238,6 +228,7 @@ impl Tag {
     }
 
     /// Returns tag as 4-element byte array.
+    #[inline]
     pub const fn to_chars(self) -> [char; 4] {
         [
             (self.0 >> 24 & 0xff) as u8 as char,
@@ -247,27 +238,20 @@ impl Tag {
         ]
     }
 
-    /// Returns tag for a default script.
-    pub const fn default_script() -> Self {
-        Tag::from_bytes(b"DFLT")
-    }
-
-    /// Returns tag for a default language.
-    pub const fn default_language() -> Self {
-        Tag::from_bytes(b"dflt")
-    }
-
     /// Checks if tag is null / `[0, 0, 0, 0]`.
+    #[inline]
     pub const fn is_null(&self) -> bool {
         self.0 == 0
     }
 
     /// Returns tag value as `u32` number.
+    #[inline]
     pub const fn as_u32(&self) -> u32 {
         self.0
     }
 
     /// Converts tag to lowercase.
+    #[inline]
     pub fn to_lowercase(&self) -> Self {
         let b = self.to_bytes();
         Tag::from_bytes(&[
@@ -279,6 +263,7 @@ impl Tag {
     }
 
     /// Converts tag to uppercase.
+    #[inline]
     pub fn to_uppercase(&self) -> Self {
         let b = self.to_bytes();
         Tag::from_bytes(&[
@@ -848,57 +833,67 @@ impl<'a> Font<'a> {
         try_opt_or!(self.os_2, Width::default()).width()
     }
 
+    #[inline]
+    fn use_typo_metrics(&self) -> Option<os2::Table> {
+        self.os_2.filter(|table| table.is_use_typo_metrics())
+    }
+
     /// Returns font's ascender value.
+    ///
+    /// This method is affected by variation axes.
     #[inline]
     pub fn ascender(&self) -> i16 {
-        if let Some(os_2) = self.os_2 {
-            if os_2.is_use_typo_metrics() {
-                return os_2.s_typo_ascender();
-            }
-        }
-
         if let Some(vhea) = self.vhea {
-            vhea.ascender()
+            self.apply_metrics_variation(Tag::from_bytes(b"vasc"), vhea.ascender())
         } else {
-            self.hhea.ascender()
+            if let Some(os_2) = self.use_typo_metrics() {
+                let v = os_2.s_typo_ascender();
+                self.apply_metrics_variation(Tag::from_bytes(b"hasc"), v)
+            } else {
+                self.hhea.ascender()
+            }
         }
     }
 
     /// Returns font's descender value.
+    ///
+    /// This method is affected by variation axes.
     #[inline]
     pub fn descender(&self) -> i16 {
-        if let Some(os_2) = self.os_2 {
-            if os_2.is_use_typo_metrics() {
-                return os_2.s_typo_descender();
-            }
-        }
-
         if let Some(vhea) = self.vhea {
-            vhea.descender()
+            self.apply_metrics_variation(Tag::from_bytes(b"vdsc"), vhea.descender())
         } else {
-            self.hhea.descender()
+            if let Some(os_2) = self.use_typo_metrics() {
+                let v = os_2.s_typo_descender();
+                self.apply_metrics_variation(Tag::from_bytes(b"hdsc"), v)
+            } else {
+                self.hhea.descender()
+            }
         }
     }
 
     /// Returns font's height.
+    ///
+    /// This method is affected by variation axes.
     #[inline]
     pub fn height(&self) -> i16 {
         self.ascender() - self.descender()
     }
 
     /// Returns font's line gap.
+    ///
+    /// This method is affected by variation axes.
     #[inline]
     pub fn line_gap(&self) -> i16 {
-        if let Some(os_2) = self.os_2 {
-            if os_2.is_use_typo_metrics() {
-                return os_2.s_typo_line_gap();
-            }
-        }
-
         if let Some(vhea) = self.vhea {
-            vhea.line_gap()
+            self.apply_metrics_variation(Tag::from_bytes(b"vlgp"), vhea.line_gap())
         } else {
-            self.hhea.line_gap()
+            if let Some(os_2) = self.use_typo_metrics() {
+                let v = os_2.s_typo_line_gap();
+                self.apply_metrics_variation(Tag::from_bytes(b"hlgp"), v)
+            } else {
+                self.hhea.line_gap()
+            }
         }
     }
 
@@ -927,51 +922,78 @@ impl<'a> Font<'a> {
 
     /// Returns font's x height.
     ///
+    /// This method is affected by variation axes.
+    ///
     /// Returns `None` when OS/2 table is not present or when its version is < 2.
     #[inline]
     pub fn x_height(&self) -> Option<i16> {
         self.os_2.and_then(|os_2| os_2.x_height())
+            .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"xhgt"), v))
     }
 
     /// Returns font's underline metrics.
+    ///
+    /// This method is affected by variation axes.
+    ///
+    /// Returns `None` when `post` table is not present.
     #[inline]
     pub fn underline_metrics(&self) -> Option<LineMetrics> {
-        self.post.and_then(|post| post.underline_metrics())
+        let mut metrics = self.post?.underline_metrics();
+        if self.is_variable() {
+            self.apply_metrics_variation_to(Tag::from_bytes(b"undo"), &mut metrics.position);
+            self.apply_metrics_variation_to(Tag::from_bytes(b"unds"), &mut metrics.thickness);
+        }
+        Some(metrics)
     }
 
     /// Returns font's strikeout metrics.
     ///
+    /// This method is affected by variation axes.
+    ///
     /// Returns `None` when OS/2 table is not present.
     #[inline]
     pub fn strikeout_metrics(&self) -> Option<LineMetrics> {
-        self.os_2.and_then(|os_2| os_2.strikeout_metrics())
+        let mut metrics = self.os_2?.strikeout_metrics();
+        if self.is_variable() {
+            self.apply_metrics_variation_to(Tag::from_bytes(b"stro"), &mut metrics.position);
+            self.apply_metrics_variation_to(Tag::from_bytes(b"strs"), &mut metrics.thickness);
+        }
+        Some(metrics)
     }
 
     /// Returns font's subscript metrics.
     ///
+    /// This method is affected by variation axes.
+    ///
     /// Returns `None` when OS/2 table is not present.
     #[inline]
     pub fn subscript_metrics(&self) -> Option<ScriptMetrics> {
-        self.os_2.and_then(|os_2| os_2.subscript_metrics())
+        let mut metrics = self.os_2?.subscript_metrics();
+        if self.is_variable() {
+            self.apply_metrics_variation_to(Tag::from_bytes(b"sbxs"), &mut metrics.x_size);
+            self.apply_metrics_variation_to(Tag::from_bytes(b"sbys"), &mut metrics.y_size);
+            self.apply_metrics_variation_to(Tag::from_bytes(b"sbxo"), &mut metrics.x_offset);
+            self.apply_metrics_variation_to(Tag::from_bytes(b"sbyo"), &mut metrics.y_offset);
+        }
+        Some(metrics)
     }
 
     /// Returns font's superscript metrics.
     ///
+    /// This method is affected by variation axes.
+    ///
     /// Returns `None` when OS/2 table is not present.
     #[inline]
     pub fn superscript_metrics(&self) -> Option<ScriptMetrics> {
-        self.os_2.and_then(|os_2| os_2.superscript_metrics())
+        let mut metrics = self.os_2?.superscript_metrics();
+        if self.is_variable() {
+            self.apply_metrics_variation_to(Tag::from_bytes(b"spxs"), &mut metrics.x_size);
+            self.apply_metrics_variation_to(Tag::from_bytes(b"spys"), &mut metrics.y_size);
+            self.apply_metrics_variation_to(Tag::from_bytes(b"spxo"), &mut metrics.x_offset);
+            self.apply_metrics_variation_to(Tag::from_bytes(b"spyo"), &mut metrics.y_offset);
+        }
+        Some(metrics)
     }
-
-    // /// Returns metrics variation offset using
-    // /// [Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/mvar).
-    // ///
-    // /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
-    // ///
-    // /// Returns `None` when `MVAR` table is not present or invalid.
-    // pub fn metrics_variation(&self, tag: Tag, coordinates: &[NormalizedCoord]) -> Option<f32> {
-    //     mvar::metrics_variation(self.mvar?, tag, coordinates)
-    // }
 
     /// Returns a total number of glyphs in the font.
     ///
@@ -1022,7 +1044,7 @@ impl<'a> Font<'a> {
 
         if self.is_variable() {
             let data = if self.is_vertical() { self.vvar } else { self.hvar };
-            advance += hvar::glyph_advance_offset(data?, glyph_id, self.coordinates.as_slice())?;
+            advance += hvar::glyph_advance_offset(data?, glyph_id, self.coords())?;
         }
 
         Some(advance)
@@ -1036,15 +1058,14 @@ impl<'a> Font<'a> {
     #[inline]
     pub fn glyph_side_bearing(&self, glyph_id: GlyphId) -> Option<f32> {
         let mut bearing = if self.is_vertical() {
-            self.vmtx.and_then(|vmtx| vmtx.advance(glyph_id))
+            self.vmtx.and_then(|vmtx| vmtx.side_bearing(glyph_id))
         } else {
-            self.hmtx.and_then(|hmtx| hmtx.advance(glyph_id))
+            self.hmtx.and_then(|hmtx| hmtx.side_bearing(glyph_id))
         }? as f32;
 
         if self.is_variable() {
             let data = if self.is_vertical() { self.vvar } else { self.hvar };
-            bearing += hvar::glyph_side_bearing_offset(data?, glyph_id,
-                                                       self.coordinates.as_slice())?;
+            bearing += hvar::glyph_side_bearing_offset(data?, glyph_id, self.coords())?;
         }
 
         Some(bearing)
@@ -1175,8 +1196,7 @@ impl<'a> Font<'a> {
         builder: &mut dyn OutlineBuilder,
     ) -> Option<Rect> {
         if let Some(ref gvar_table) = self.gvar {
-            return gvar::outline(self.loca?, self.glyf?, gvar_table,
-                                 self.coordinates.as_slice(), glyph_id, builder);
+            return gvar::outline(self.loca?, self.glyf?, gvar_table, self.coords(), glyph_id, builder);
         }
 
         if let Some(glyf_table) = self.glyf {
@@ -1188,7 +1208,7 @@ impl<'a> Font<'a> {
         }
 
         if let Some(ref metadata) = self.cff2 {
-            return cff2::outline(metadata, self.coordinates.as_slice(), glyph_id, builder);
+            return cff2::outline(metadata, self.coords(), glyph_id, builder);
         }
 
         None
@@ -1222,9 +1242,9 @@ impl<'a> Font<'a> {
     /// We can simplify the API a lot by storing the variable coordinates
     /// in the font object itself.
     ///
-    /// Returns `None` when:
-    /// - font is not variable
-    /// - font doesn't have such axis
+    /// Since coordinates are stored on the stack, we allow only 32 of them.
+    ///
+    /// Returns `None` when font is not variable or doesn't have such axis.
     pub fn set_variation(&mut self, axis: Tag, value: f32) -> Option<()> {
         if !self.is_variable() {
             return None;
@@ -1249,6 +1269,32 @@ impl<'a> Font<'a> {
         }
 
         Some(())
+    }
+
+    #[inline]
+    fn metrics_var_offset(&self, tag: Tag) -> f32 {
+        self.mvar.and_then(|table| mvar::metrics_offset(table, tag, self.coords())).unwrap_or(0.0)
+    }
+
+    #[inline]
+    fn apply_metrics_variation(&self, tag: Tag, mut value: i16) -> i16 {
+        self.apply_metrics_variation_to(tag, &mut value);
+        value
+    }
+
+    #[inline]
+    fn apply_metrics_variation_to(&self, tag: Tag, value: &mut i16) {
+        if self.is_variable() {
+            let v = f32::from(*value) + self.metrics_var_offset(tag);
+            if let Some(v) = i16::try_num_from(v.round()) {
+                *value = v;
+            }
+        }
+    }
+
+    #[inline]
+    fn coords(&self) -> &[NormalizedCoord] {
+        self.coordinates.as_slice()
     }
 }
 

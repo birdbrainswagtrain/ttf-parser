@@ -71,18 +71,6 @@ impl<'a> Table<'a> {
     }
 }
 
-#[inline]
-pub fn advance(table: &Table, glyph_id: GlyphId) -> Option<u16> {
-    if let Some(metrics) = table.metrics.get(glyph_id.0) {
-        Some(metrics.advance_width())
-    } else {
-        // 'As an optimization, the number of records can be less than the number of glyphs,
-        // in which case the advance width value of the last record applies
-        // to all remaining glyph IDs.'
-        table.metrics.last().map(|m| m.advance_width())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

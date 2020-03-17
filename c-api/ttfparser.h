@@ -452,6 +452,8 @@ bool ttfp_get_glyph_bbox(const ttfp_font *font, uint16_t glyph_id, ttfp_rect *bb
  *
  * This function is reentrant.
  *
+ * Since coordinates are stored on the stack, we allow only 32 of them.
+ *
  * @return `false` when font is not variable or doesn't have such axis.
  */
 bool ttfp_set_variation(ttfp_font *font, ttfp_tag axis, float value);

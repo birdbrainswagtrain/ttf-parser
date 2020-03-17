@@ -4,8 +4,12 @@ use crate::{Tag, NormalizedCoord};
 use crate::parser::{Stream, Offset, Offset16, Offset32};
 use crate::raw::mvar as raw;
 
-
-pub(crate) fn metrics_variation(data: &[u8], tag: Tag, coordinates: &[NormalizedCoord]) -> Option<f32> {
+// TODO: to table
+pub(crate) fn metrics_offset(
+    data: &[u8],
+    tag: Tag,
+    coordinates: &[NormalizedCoord],
+) -> Option<f32> {
     let mut s = Stream::new(data);
 
     let version: u32 = s.read()?;

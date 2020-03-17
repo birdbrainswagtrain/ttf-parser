@@ -1,5 +1,7 @@
 //! Common types for GDEF, GPOS and GSUB tables.
 
+#![allow(dead_code)]
+
 use core::convert::TryFrom;
 
 use crate::{GlyphId, Tag, NormalizedCoord};

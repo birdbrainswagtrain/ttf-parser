@@ -612,6 +612,8 @@ pub extern "C" fn ttfp_get_glyph_bbox(
 ///
 /// This function is reentrant.
 ///
+/// Since coordinates are stored on the stack, we allow only 32 of them.
+///
 /// @return `false` when font is not variable or doesn't have such axis.
 #[no_mangle]
 pub extern "C" fn ttfp_set_variation(font: *mut ttfp_font, axis: Tag, value: f32) -> bool {
