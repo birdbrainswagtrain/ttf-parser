@@ -312,7 +312,6 @@ pub extern "C" fn ttfp_get_units_per_em(font: *const ttfp_font) -> u16 {
     font_from_ptr(font).units_per_em().unwrap_or(0)
 }
 
-
 /// @brief Returns font's x height.
 ///
 /// @return x height or 0 when OS/2 table is not present or when its version is < 2.
