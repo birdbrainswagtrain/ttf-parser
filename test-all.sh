@@ -13,6 +13,7 @@ cd c-api
 cargo build
 gcc test.c -o test -L./target/debug/ -lttfparser -Werror
 env LD_LIBRARY_PATH=./target/debug/ ./test
+cd ..
 
 cd benches
-cargo bench
+cargo build
