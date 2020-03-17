@@ -935,7 +935,9 @@ impl<'a> Font<'a> {
         self.vhea.is_some()
     }
 
-    /// Checks if font is a variable font.
+    /// Checks that font is variable.
+    ///
+    /// Simply checks the presence of a `fvar` table.
     #[inline]
     pub fn is_variable(&self) -> bool {
         // `fvar::Table::parse` already checked that `axisCount` is non-zero.
@@ -1132,7 +1134,7 @@ impl<'a> Font<'a> {
 
     // TODO: maybe fallback to bbox when no hmtx/vmtx?
 
-    /// Returns glyph's advance using.
+    /// Returns glyph's advance.
     ///
     /// Supports both horizontal and vertical fonts.
     #[inline]
@@ -1144,7 +1146,7 @@ impl<'a> Font<'a> {
         }
     }
 
-    /// Returns glyph's side bearing using.
+    /// Returns glyph's side bearing.
     ///
     /// Supports both horizontal and vertical fonts.
     #[inline]
@@ -1153,6 +1155,42 @@ impl<'a> Font<'a> {
             self.vmtx.and_then(|vmtx| vmtx.side_bearing(glyph_id))
         } else {
             self.hmtx.and_then(|hmtx| hmtx.side_bearing(glyph_id))
+        }
+    }
+
+    /// Returns glyph's advance variation offset.
+    ///
+    /// Supports both horizontal and vertical fonts.
+    #[inline]
+    pub fn glyph_advance_variation(
+        &self,
+        glyph_id: GlyphId,
+        coordinates: &[NormalizedCoord],
+    ) -> Option<f32> {
+        if let Some(hvar) = self.hvar {
+            hvar::glyph_advance_variation(hvar, glyph_id, coordinates)
+        } else if let Some(vvar) = self.vvar {
+            hvar::glyph_advance_variation(vvar, glyph_id, coordinates)
+        } else {
+            None
+        }
+    }
+
+    /// Returns glyph's side bearing variation offset.
+    ///
+    /// Supports both horizontal and vertical fonts.
+    #[inline]
+    pub fn glyph_side_bearing_variation(
+        &self,
+        glyph_id: GlyphId,
+        coordinates: &[NormalizedCoord],
+    ) -> Option<f32> {
+        if let Some(hvar) = self.hvar {
+            hvar::glyph_side_bearing_variation(hvar, glyph_id, coordinates)
+        } else if let Some(vvar) = self.vvar {
+            hvar::glyph_side_bearing_variation(vvar, glyph_id, coordinates)
+        } else {
+            None
         }
     }
 

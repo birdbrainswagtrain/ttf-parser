@@ -9,7 +9,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stddef.h>
 
 #define TTFP_MAJOR_VERSION 0
 #define TTFP_MINOR_VERSION 4
@@ -140,7 +139,6 @@ typedef enum ttfp_glyph_class {
  * @brief Initializes the library log.
  *
  * Use it if you want to see any warnings.
- * All warnings will be printed to the \b stderr.
  *
  * Will do nothing when library is built without the `logging` feature.
  *
@@ -190,88 +188,131 @@ uint16_t ttfp_get_name_records_count(const ttfp_font *font);
 /**
  * @brief Returns a name record.
  *
- * @param Record's index. The total count can be obtained via #ttfp_get_name_records_count.
- * @return \b false when \b index is out of range or \b platform_id is invalid.
+ * @param Record's index. The total amount can be obtained via #ttfp_get_name_records_count.
+ * @return `false` when `index` is out of range or `platform_id` is invalid.
  */
 bool ttfp_get_name_record(const ttfp_font *font, uint16_t index, ttfp_name_record *record);
 
 /**
  * @brief Returns a name record's string.
  *
+ * @param index Record's index.
  * @param name A string buffer that will be filled with the record's name.
- *             Remember that a name will use encoding specified in \b ttfp_name_record.encoding_id
+ *             Remember that a name will use encoding specified in `ttfp_name_record.encoding_id`
  *             Because of that, the name will not be null-terminated.
- * @param name_size Size of the string buffer. Must be equal to \b ttfp_name_record.name_sizeq
- * @return \b false when \b index is out of range or string buffer is not equal
- *         \b ttfp_name_record.name_size.
+ * @param len The size of a string buffer. Must be equal to `ttfp_name_record.name_size`.
+ * @return `false` when `index` is out of range or string buffer is not equal
+ *         `ttfp_name_record.name_size`.
  */
-bool ttfp_get_name_record_string(const ttfp_font *font, uint16_t index, char *name, size_t name_size);
-
+bool ttfp_get_name_record_string(const ttfp_font *font, uint16_t index, char *name, uintptr_t len);
 
 /**
- * @brief Checks that font is marked as \b Regular.
+ * @brief Checks that font is marked as *Regular*.
+ *
+ * @return `false` when OS/2 table is not present.
  */
 bool ttfp_is_regular(const ttfp_font *font);
 
 /**
- * @brief Checks that font is marked as \b Italic.
+ * @brief Checks that font is marked as *Italic*.
+ *
+ * @return `false` when OS/2 table is not present.
  */
 bool ttfp_is_italic(const ttfp_font *font);
 
 /**
- * @brief Checks that font is marked as \b Bold.
+ * @brief Checks that font is marked as *Bold*.
+ *
+ * @return `false` when OS/2 table is not present.
  */
 bool ttfp_is_bold(const ttfp_font *font);
 
 /**
- * @brief Checks that font is marked as \b Oblique.
+ * @brief Checks that font is marked as *Oblique*.
+ *
+ * @return `false` when OS/2 table is not present.
  */
 bool ttfp_is_oblique(const ttfp_font *font);
 
 /**
- * @brief Checks if font is a variable font.
+ * @brief Checks that font is vertical.
+ *
+ * Simply checks the presence of a `vhea` table.
  */
-uint16_t ttfp_is_variable(const ttfp_font *font);
+bool ttfp_is_vertical(const ttfp_font *font);
+
+/**
+ * @brief Returns font's weight.
+ *
+ * @return Font's weight or `400` when OS/2 table is not present.
+ */
+uint16_t ttfp_get_weight(const ttfp_font *font);
 
 /**
  * @brief Returns font's width.
  *
- * @return A number in a 1..9 range. Returns \b 5 / Normal when OS/2 table is not present.
+ * @return Font's width in a 1..9 range or `5` when OS/2 table is not present
+ *         or when value is invalid.
  */
 uint16_t ttfp_get_width(const ttfp_font *font);
 
 /**
+ * @brief Returns font's ascender value.
+ */
+int16_t ttfp_get_ascender(const ttfp_font *font);
+
+/**
+ * @brief Returns font's descender value.
+ */
+int16_t ttfp_get_descender(const ttfp_font *font);
+
+/**
+ * @brief Returns font's height.
+ */
+int16_t ttfp_get_height(const ttfp_font *font);
+
+/**
+ * @brief Returns font's line gap.
+ */
+int16_t ttfp_get_line_gap(const ttfp_font *font);
+
+/**
+ * @brief Returns font's units per EM.
+ *
+ * @return Units in a 16..16384 range or `0` otherwise.
+ */
+uint16_t ttfp_get_units_per_em(const ttfp_font *font);
+
+/**
  * @brief Returns font's x height.
  *
- * @return Font's x height or 0 when OS/2 table is not present.
+ * @return x height or 0 when OS/2 table is not present or when its version is < 2.
  */
 int16_t ttfp_get_x_height(const ttfp_font *font);
 
 /**
  * @brief Returns font's underline metrics.
- *
- * @return \b false when the \b post table is not present.
  */
 bool ttfp_get_underline_metrics(const ttfp_font *font, ttfp_line_metrics *metrics);
 
 /**
  * @brief Returns font's strikeout metrics.
  *
- * @return \b false when the \b OS/2 table is not present.
+ * @return `false` when OS/2 table is not present.
  */
 bool ttfp_get_strikeout_metrics(const ttfp_font *font, ttfp_line_metrics *metrics);
 
 /**
  * @brief Returns font's subscript metrics.
  *
- * @return \b false when the \b OS/2 table is not present.
+ * @return `false` when OS/2 table is not present.
  */
 bool ttfp_get_subscript_metrics(const ttfp_font *font, ttfp_script_metrics *metrics);
 
 /**
  * @brief Returns font's superscript metrics.
  *
- * @return \b false when the \b OS/2 table is not present.
+ * @return `false` when OS/2 table is not present.
  */
 bool ttfp_get_superscript_metrics(const ttfp_font *font, ttfp_script_metrics *metrics);
 
@@ -385,29 +426,6 @@ bool ttfp_outline_glyph(const ttfp_font *font,
                         ttfp_rect *bbox);
 
 /**
- * @brief Outlines a variable glyph and returns its tight bounding box.
- *
- * \b coordinates should be represented in a -1.0..1.0 range using fixed point 2.14.
- * i.e. the float value should be multiplied by 16384.
- *
- * Number of \b coordinates should be the same as the number of variation axes in the font.
- *
- * \b Warning: since \b ttf-parser is a pull parser,
- * #ttfp_outline_builder will emit segments even when outline is partially malformed.
- * You must check #ttfp_outline_variable_glyph result for error before using
- * #ttfp_outline_builder's output.
- *
- * This method supports \b glyf + \b gvar and \b CFF2 tables.
- */
-bool ttfp_outline_variable_glyph(ttfp_font *font,
-                                 ttfp_outline_builder builder,
-                                 void* user_data,
-                                 uint16_t glyph_id,
-                                 const int16_t *coordinates,
-                                 uint32_t coordinates_size,
-                                 ttfp_bbox *bbox);
-
-/**
  * @brief Returns a tight glyph bounding box.
  *
  * Note that this method's performance depends on a table type the current font is using.
@@ -418,37 +436,6 @@ bool ttfp_outline_variable_glyph(ttfp_font *font,
  * then prefer #ttfp_outline_glyph method.
  */
 bool ttfp_get_glyph_bbox(const ttfp_font *font, uint16_t glyph_id, ttfp_rect *bbox);
-
-/**
- * @brief Returns a number of variation axes.
- */
-uint16_t ttfp_variation_axes_count(const ttfp_font *font);
-
-/**
- * @brief Returns a variation axis by index.
- */
-bool ttfp_get_variation_axis(const ttfp_font *font,
-                             uint16_t index,
-                             ttfp_variation_axis *axis);
-
-/**
- * @brief Returns a variation axis by tag.
- */
-bool ttfp_get_variation_axis_by_tag(const ttfp_font *font,
-                                    ttfp_tag tag,
-                                    ttfp_variation_axis *axis);
-
-/**
- * @brief Performs normalization mapping to variation coordinates.
- *
- * Note: coordinates should be converted from fixed point 2.14 to int16_t
- * by multiplying each coordinate by 16384.
- *
- * Number of \b coordinates should be the same as number of variation axes in the font.
- */
-bool ttfp_map_variation_coordinates(const ttfp_font *font,
-                                    int16_t *coordinates,
-                                    uint32_t coordinates_size);
 
 #ifdef __cplusplus
 }
