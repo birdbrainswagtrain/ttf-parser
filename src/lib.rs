@@ -195,7 +195,7 @@ pub struct Variation {
 
 
 /// A 4-byte tag.
-#[repr(C)]
+#[repr(transparent)]
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Tag(pub u32);
 
@@ -983,12 +983,6 @@ impl<'a> Font<'a> {
         self.number_of_glyphs.get()
     }
 
-    /// Returns an iterator over variation axes.
-    #[inline]
-    pub fn variation_axes(&self) -> VariationAxes {
-        self.fvar.map(|fvar| fvar.axes()).unwrap_or_default()
-    }
-
     /// Resolves a Glyph ID for a code point.
     ///
     /// Returns `None` instead of `0` when glyph is not found.
@@ -1214,6 +1208,12 @@ impl<'a> Font<'a> {
         }
 
         self.outline_glyph(glyph_id, &mut DummyOutline)
+    }
+
+    /// Returns an iterator over variation axes.
+    #[inline]
+    pub fn variation_axes(&self) -> VariationAxes {
+        self.fvar.map(|fvar| fvar.axes()).unwrap_or_default()
     }
 
     /// Sets a variation axis coordinate.

@@ -199,7 +199,7 @@ public:
                                 std::istreambuf_iterator<char>());
         m_fontData = std::move(data);
 
-        m_font = ttfp_create_font((const uint8_t *)m_fontData.data(), m_fontData.size(), index);
+        m_font = ttfp_create_font(m_fontData.data(), m_fontData.size(), index);
         if (!m_font) {
             throw "failed to parse a font";
         }
@@ -217,6 +217,13 @@ public:
         return ttfp_get_number_of_glyphs(m_font);
     }
 
+    void setVariations()
+    {
+        if (!ttfp_set_variation(m_font, TTFP_TAG('w', 'g', 'h', 't'), 500)) {
+            throw "failed to set veriations";
+        }
+    }
+
     uint32_t outline(const uint16_t gid) const
     {
         Outliner outliner;
@@ -228,27 +235,8 @@ public:
         builder.curve_to = outliner.curveToFn;
         builder.close_path = outliner.closePathFn;
 
-        ttfp_bbox bbox;
+        ttfp_rect bbox;
         ttfp_outline_glyph(m_font, builder, &outliner, gid, &bbox);
-
-        return outliner.counter;
-    }
-
-    uint32_t outlineVariable(const uint16_t gid) const
-    {
-        Outliner outliner;
-
-        ttfp_outline_builder builder;
-        builder.move_to = outliner.moveToFn;
-        builder.line_to = outliner.lineToFn;
-        builder.quad_to = outliner.quadToFn;
-        builder.curve_to = outliner.curveToFn;
-        builder.close_path = outliner.closePathFn;
-
-        int16_t coords[1] = {7930};
-
-        ttfp_bbox bbox;
-        ttfp_outline_variable_glyph(m_font, builder, &outliner, gid, coords, 1, &bbox);
 
         return outliner.counter;
     }
@@ -344,10 +332,11 @@ BENCHMARK(ttf_parser_outline_glyf);
 static void ttf_parser_outline_gvar(benchmark::State &state)
 {
     TTFP::Font font("../fonts/SourceSansVariable-Roman.ttf", 0);
+    font.setVariations();
     const auto numberOfGlyphs = font.numberOfGlyphs();
     for (auto _ : state) {
         for (uint i = 0; i < numberOfGlyphs; i++) {
-            font.outlineVariable(i);
+            font.outline(i);
         }
     }
 }
@@ -368,10 +357,11 @@ BENCHMARK(ttf_parser_outline_cff);
 static void ttf_parser_outline_cff2(benchmark::State &state)
 {
     TTFP::Font font("../fonts/SourceSansVariable-Roman.otf", 0);
+    font.setVariations();
     const auto numberOfGlyphs = font.numberOfGlyphs();
     for (auto _ : state) {
         for (uint i = 0; i < numberOfGlyphs; i++) {
-            font.outlineVariable(i);
+            font.outline(i);
         }
     }
 }

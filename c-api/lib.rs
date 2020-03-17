@@ -3,7 +3,7 @@
 use std::convert::TryFrom;
 use std::os::raw::{c_void, c_char};
 
-use ttf_parser::GlyphId;
+use ttf_parser::{GlyphId, Tag};
 
 /// @brief An opaque pointer to the font structure.
 #[repr(C)]
@@ -72,6 +72,10 @@ pub enum ttfp_glyph_class {
 
 fn font_from_ptr(font: *const ttfp_font) -> &'static ttf_parser::Font<'static> {
     unsafe { &*(font as *const ttf_parser::Font) }
+}
+
+fn font_from_mut_ptr(font: *const ttfp_font) -> &'static mut ttf_parser::Font<'static> {
+    unsafe { &mut *(font as *mut ttf_parser::Font) }
 }
 
 /// @brief Initializes the library log.
@@ -440,20 +444,24 @@ pub extern "C" fn ttfp_get_glyph_var_index(
 ///
 /// Supports both horizontal and vertical fonts.
 ///
+/// This function is affected by variation axes.
+///
 /// @return Glyph's advance or 0 when not set.
 #[no_mangle]
-pub extern "C" fn ttfp_get_glyph_advance(font: *const ttfp_font, glyph_id: GlyphId) -> u16 {
-    font_from_ptr(font).glyph_advance(glyph_id).unwrap_or(0)
+pub extern "C" fn ttfp_get_glyph_advance(font: *const ttfp_font, glyph_id: GlyphId) -> f32 {
+    font_from_ptr(font).glyph_advance(glyph_id).unwrap_or(0.0)
 }
 
 /// @brief Returns glyph's side bearing.
 ///
 /// Supports both horizontal and vertical fonts.
 ///
+/// This function is affected by variation axes.
+///
 /// @return Glyph's side bearing or 0 when not set.
 #[no_mangle]
-pub extern "C" fn ttfp_get_glyph_side_bearing(font: *const ttfp_font, glyph_id: GlyphId) -> i16 {
-    font_from_ptr(font).glyph_side_bearing(glyph_id).unwrap_or(0)
+pub extern "C" fn ttfp_get_glyph_side_bearing(font: *const ttfp_font, glyph_id: GlyphId) -> f32 {
+    font_from_ptr(font).glyph_side_bearing(glyph_id).unwrap_or(0.0)
 }
 
 /// @brief Returns a vertical origin of a glyph.
@@ -538,14 +546,18 @@ pub extern "C" fn ttfp_get_glyphs_kerning(
     font_from_ptr(font).glyphs_kerning(glyph_id1, glyph_id2).unwrap_or(0)
 }
 
-/// @brief Outlines a glyph using provided outline builder and returns its tight bounding box.
+/// @brief Outlines a glyph and returns its tight bounding box.
 ///
-/// **Warning**: since `ttfparser` is a pull parser,
-/// #ttfp_outline_builder will emit segments even when outline is partially malformed.
-/// You must check #ttfp_outline_glyph result for error before using
-/// #ttfp_outline_builder's output.
+/// **Warning**: since `ttf-parser` is a pull parser,
+/// `OutlineBuilder` will emit segments even when outline is partially malformed.
+/// You must check #ttfp_outline_glyph() result before using
+/// #ttfp_outline_builder 's output.
 ///
-/// This method supports `glyf` and `CFF` tables.
+/// `glyf`, `gvar`, `CFF` and `CFF2` tables are supported.
+///
+/// This function is affected by variation axes.
+///
+/// @return `false` when glyph has no outline or on error.
 #[no_mangle]
 pub extern "C" fn ttfp_outline_glyph(
     font: *const ttfp_font,
@@ -569,12 +581,11 @@ pub extern "C" fn ttfp_outline_glyph(
 
 /// @brief Returns a tight glyph bounding box.
 ///
-/// Note that this method's performance depends on a table type the current font is using.
-/// In case of a `glyf` table, it's basically free, since this table stores
-/// bounding box separately. In case of `CFF` we should actually outline
-/// a glyph and then calculate its bounding box. So if you need an outline and
-/// a bounding box and you have an OpenType font (which uses CFF)
-/// then prefer #ttfp_outline_glyph method.
+/// Unless the current font has a `glyf` table, this is just a shorthand for `outline_glyph()`
+/// since only the `glyf` table stores a bounding box. In case of CFF and variable fonts
+/// we have to actually outline a glyph to find it's bounding box.
+///
+/// This function is affected by variation axes.
 #[no_mangle]
 pub extern "C" fn ttfp_get_glyph_bbox(
     font: *const ttfp_font,
@@ -591,6 +602,20 @@ pub extern "C" fn ttfp_get_glyph_bbox(
             None => false,
         }
     }).unwrap_or(false)
+}
+
+/// @brief Sets a variation axis coordinate.
+///
+/// This is the only mutable function in the library.
+/// We can simplify the API a lot by storing the variable coordinates
+/// in the font object itself.
+///
+/// This function is reentrant.
+///
+/// @return `false` when font is not variable or doesn't have such axis.
+#[no_mangle]
+pub extern "C" fn ttfp_set_variation(font: *mut ttfp_font, axis: Tag, value: f32) -> bool {
+    font_from_mut_ptr(font).set_variation(axis, value).is_some()
 }
 
 #[cfg(feature = "logging")]

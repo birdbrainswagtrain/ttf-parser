@@ -29,6 +29,12 @@ typedef struct ttfp_font ttfp_font;
  */
 typedef uint32_t ttfp_tag;
 
+#define TTFP_TAG(c1,c2,c3,c4) \
+    ((ttfp_tag)((((uint32_t)(c1)&0xFF)<<24)| \
+    (((uint32_t)(c2)&0xFF)<<16)| \
+    (((uint32_t)(c3)&0xFF)<<8)| \
+    ((uint32_t)(c4)&0xFF)))
+
 /**
  * @brief A glyph's tight bounding box.
  */
@@ -436,6 +442,19 @@ bool ttfp_outline_glyph(const ttfp_font *font,
  * then prefer #ttfp_outline_glyph method.
  */
 bool ttfp_get_glyph_bbox(const ttfp_font *font, uint16_t glyph_id, ttfp_rect *bbox);
+
+/**
+ * @brief Sets a variation axis coordinate.
+ *
+ * This is the only mutable function in the library.
+ * We can simplify the API a lot by storing the variable coordinates
+ * in the font object itself.
+ *
+ * This function is reentrant.
+ *
+ * @return `false` when font is not variable or doesn't have such axis.
+ */
+bool ttfp_set_variation(ttfp_font *font, ttfp_tag axis, float value);
 
 #ifdef __cplusplus
 }
