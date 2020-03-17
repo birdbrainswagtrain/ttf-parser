@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define TTFP_ENABLE_LOGGING
 #include "ttfparser.h"
 
 void move_to_cb(float x, float y, void *data)
@@ -66,10 +67,8 @@ int main() {
     assert(ttfp_get_glyph_index(font, 0xFFFFFFFF) == 0);
     assert(ttfp_get_glyph_var_index(font, 0x0041, 0xFE03) == 0);
 
-    assert(ttfp_get_glyph_hor_advance(font, 0x0041) == 544);
-    assert(ttfp_get_glyph_hor_side_bearing(font, 0x0041) == 3);
-    assert(ttfp_get_glyph_ver_advance(font, 0x0041) == 0);
-    assert(ttfp_get_glyph_ver_side_bearing(font, 0x0041) == 0);
+    assert(ttfp_get_glyph_advance(font, 0x0041) == 544);
+    assert(ttfp_get_glyph_side_bearing(font, 0x0041) == 3);
     assert(ttfp_get_glyph_y_origin(font, a_gid) == 0);
     assert(ttfp_get_glyphs_kerning(font, 2, 3) == 0);
 
@@ -122,7 +121,7 @@ int main() {
     assert(ttfp_get_glyph_mark_attachment_class(font, a_gid) == 0);
     assert(ttfp_is_mark_glyph(font, a_gid) == false);
 
-    ttfp_bbox a_bbox;
+    ttfp_rect a_bbox = {0};
     assert(ttfp_get_glyph_bbox(font, a_gid, &a_bbox));
     assert(a_bbox.x_min == 3);
     assert(a_bbox.y_min == 0);

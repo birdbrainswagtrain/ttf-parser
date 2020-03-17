@@ -5,12 +5,14 @@ use std::os::raw::{c_void, c_char};
 
 use ttf_parser::{GlyphId, NormalizedCoord};
 
+/// @brief An opaque pointer to the font structure.
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ttfp_font {
     _unused: [u8; 0],
 }
 
+/// @brief An outline building interface.
 #[repr(C)]
 pub struct ttfp_outline_builder {
     pub move_to: unsafe extern "C" fn(x: f32, y: f32, data: *mut c_void),
@@ -44,20 +46,59 @@ impl ttf_parser::OutlineBuilder for Builder {
     }
 }
 
+/// @brief A name record.
+///
+/// https://docs.microsoft.com/en-us/typography/opentype/spec/name#name-records
 #[repr(C)]
 #[derive(Clone, Copy)]
 pub struct ttfp_name_record {
-    platform_id: u16,
-    encoding_id: u16,
-    language_id: u16,
-    name_id: u16,
-    name_size: u16,
+    pub platform_id: u16,
+    pub encoding_id: u16,
+    pub language_id: u16,
+    pub name_id: u16,
+    pub name_size: u16,
+}
+
+/// @brief A list of glyph classes.
+#[repr(C)]
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum ttfp_glyph_class {
+    TTFP_GLYPH_CLASS_UNKNOWN   = 0,
+    TTFP_GLYPH_CLASS_BASE      = 1,
+    TTFP_GLYPH_CLASS_LIGATURE  = 2,
+    TTFP_GLYPH_CLASS_MARK      = 3,
+    TTFP_GLYPH_CLASS_COMPONENT = 4,
 }
 
 fn font_from_ptr(font: *const ttfp_font) -> &'static ttf_parser::Font<'static> {
     unsafe { &*(font as *const ttf_parser::Font) }
 }
 
+/// @brief Initializes the library log.
+///
+/// Use it if you want to see any warnings.
+///
+/// Will do nothing when library is built without the `logging` feature.
+///
+/// All warnings will be printed to the `stderr`.
+#[cfg(feature = "logging")]
+#[no_mangle]
+pub extern "C" fn ttfp_init_log() {
+    if let Ok(()) = log::set_logger(&logging::LOGGER) {
+        log::set_max_level(log::LevelFilter::Warn);
+    }
+}
+
+#[cfg(not(feature = "logging"))]
+#[no_mangle]
+pub extern "C" fn ttfp_init_log() {}
+
+/// @brief Returns the number of fonts stored in a TrueType font collection.
+///
+/// @param data The font data.
+/// @param len The size of the font data.
+/// @return Number of fonts or -1 when provided data is not a TrueType font collection
+///         or when number of fonts is larger than INT_MAX.
 #[no_mangle]
 pub extern "C" fn ttfp_fonts_in_collection(data: *const c_char, len: usize) -> i32 {
     let data = unsafe { std::slice::from_raw_parts(data as *const _, len) };
@@ -67,6 +108,14 @@ pub extern "C" fn ttfp_fonts_in_collection(data: *const c_char, len: usize) -> i
     }
 }
 
+/// @brief Creates a new font parser.
+///
+/// This is the only heap allocation in the library.
+///
+/// @param data The font data. Must outlive the #ttfp_font.
+/// @param len The size of the font data.
+/// @param index The font index in a collection (typically *.ttc). 0 should be used for basic fonts.
+/// @return Font handle or NULL on error.
 #[no_mangle]
 pub extern "C" fn ttfp_create_font(data: *const c_char, len: usize, index: u32) -> *mut ttfp_font {
     // This method invokes a lot of parsing, so let's catch any panics just in case.
@@ -85,7 +134,7 @@ pub extern "C" fn ttfp_destroy_font(font: *mut ttfp_font) {
 
 /// @brief Checks that font has a specified table.
 ///
-/// Will return `true` only for tables that were successfully parsed.
+/// @return `true` only for tables that were successfully parsed.
 #[no_mangle]
 pub extern "C" fn ttfp_has_table(font: *const ttfp_font, name: ttf_parser::TableName) -> bool {
     font_from_ptr(font).has_table(name)
@@ -279,26 +328,6 @@ pub extern "C" fn ttfp_get_glyph_var_index(
 }
 
 #[no_mangle]
-pub extern "C" fn ttfp_get_glyph_hor_advance(font: *const ttfp_font, glyph_id: GlyphId) -> u16 {
-    font_from_ptr(font).glyph_hor_advance(glyph_id).unwrap_or(0)
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_glyph_hor_side_bearing(font: *const ttfp_font, glyph_id: GlyphId) -> i16 {
-    font_from_ptr(font).glyph_hor_side_bearing(glyph_id).unwrap_or(0)
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_glyph_ver_advance(font: *const ttfp_font, glyph_id: GlyphId) -> u16 {
-    font_from_ptr(font).glyph_ver_advance(glyph_id).unwrap_or(0)
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_glyph_ver_side_bearing(font: *const ttfp_font, glyph_id: GlyphId) -> i16 {
-    font_from_ptr(font).glyph_ver_side_bearing(glyph_id).unwrap_or(0)
-}
-
-#[no_mangle]
 pub extern "C" fn ttfp_get_glyph_y_origin(font: *const ttfp_font, glyph_id: GlyphId) -> i16 {
     font_from_ptr(font).glyph_y_origin(glyph_id).unwrap_or(0)
 }
@@ -354,86 +383,107 @@ pub extern "C" fn ttfp_is_mark_glyph(font: *const ttfp_font, glyph_id: GlyphId) 
     font_from_ptr(font).is_mark_glyph(glyph_id, None)
 }
 
-#[no_mangle]
-pub extern "C" fn ttfp_get_units_per_em(font: *const ttfp_font) -> u16 {
-    font_from_ptr(font).units_per_em().unwrap_or(0)
-}
-
-#[no_mangle]
-pub extern "C" fn ttfp_get_underline_metrics(
-    font: *const ttfp_font,
-    raw_metrics: *mut ttf_parser::LineMetrics,
-) -> bool {
-    match font_from_ptr(font).underline_metrics() {
-        Some(metrics) => {
-            unsafe { *raw_metrics = metrics; }
-            true
-        }
-        None => false,
-    }
-}
-
+/// @brief Returns font's strikeout metrics.
+///
+/// @return `false` when OS/2 table is not present.
 #[no_mangle]
 pub extern "C" fn ttfp_get_strikeout_metrics(
     font: *const ttfp_font,
-    raw_metrics: *mut ttf_parser::LineMetrics,
+    metrics: *mut ttf_parser::LineMetrics,
 ) -> bool {
     match font_from_ptr(font).strikeout_metrics() {
-        Some(metrics) => {
-            unsafe { *raw_metrics = metrics; }
+        Some(m) => {
+            unsafe { *metrics = m; }
             true
         }
         None => false,
     }
 }
 
+/// @brief Returns font's subscript metrics.
+///
+/// @return `false` when OS/2 table is not present.
 #[no_mangle]
 pub extern "C" fn ttfp_get_subscript_metrics(
     font: *const ttfp_font,
-    raw_metrics: *mut ttf_parser::ScriptMetrics,
+    metrics: *mut ttf_parser::ScriptMetrics,
 ) -> bool {
     match font_from_ptr(font).subscript_metrics() {
-        Some(metrics) => {
-            unsafe { *raw_metrics = metrics; }
+        Some(m) => {
+            unsafe { *metrics = m; }
             true
         }
         None => false,
     }
 }
 
+/// @brief Returns font's superscript metrics.
+///
+/// @return `false` when OS/2 table is not present.
 #[no_mangle]
 pub extern "C" fn ttfp_get_superscript_metrics(
     font: *const ttfp_font,
-    raw_metrics: *mut ttf_parser::ScriptMetrics,
+    metrics: *mut ttf_parser::ScriptMetrics,
 ) -> bool {
     match font_from_ptr(font).superscript_metrics() {
-        Some(metrics) => {
-            unsafe { *raw_metrics = metrics; }
+        Some(m) => {
+            unsafe { *metrics = m; }
             true
         }
         None => false,
     }
 }
 
+/// @brief Returns a total number of glyphs in the font.
+///
+/// @return The number of glyphs which is never zero.
 #[no_mangle]
 pub extern "C" fn ttfp_get_number_of_glyphs(font: *const ttfp_font) -> u16 {
     font_from_ptr(font).number_of_glyphs()
 }
 
+/// @brief Returns glyph's advance using.
+///
+/// Supports both horizontal and vertical fonts.
+///
+/// @return Glyph's advance or 0 when not set.
+#[no_mangle]
+pub extern "C" fn ttfp_get_glyph_advance(font: *const ttfp_font, glyph_id: GlyphId) -> u16 {
+    font_from_ptr(font).glyph_advance(glyph_id).unwrap_or(0)
+}
+
+/// @brief Returns glyph's side bearing using.
+///
+/// Supports both horizontal and vertical fonts.
+///
+/// @return Glyph's side bearing or 0 when not set.
+#[no_mangle]
+pub extern "C" fn ttfp_get_glyph_side_bearing(font: *const ttfp_font, glyph_id: GlyphId) -> i16 {
+    font_from_ptr(font).glyph_side_bearing(glyph_id).unwrap_or(0)
+}
+
+/// @brief Outlines a glyph using provided outline builder and returns its tight bounding box.
+///
+/// **Warning**: since `ttfparser` is a pull parser,
+/// #ttfp_outline_builder will emit segments even when outline is partially malformed.
+/// You must check #ttfp_outline_glyph result for error before using
+/// #ttfp_outline_builder's output.
+///
+/// This method supports `glyf` and `CFF` tables.
 #[no_mangle]
 pub extern "C" fn ttfp_outline_glyph(
     font: *const ttfp_font,
-    raw_builder: ttfp_outline_builder,
+    builder: ttfp_outline_builder,
     user_data: *mut c_void,
     glyph_id: GlyphId,
-    raw_bbox: *mut ttf_parser::Rect,
+    bbox: *mut ttf_parser::Rect,
 ) -> bool {
     // This method invokes a lot of parsing, so let's catch any panics just in case.
     std::panic::catch_unwind(|| {
-        let mut builder = Builder(raw_builder, user_data);
-        match font_from_ptr(font).outline_glyph(glyph_id, &mut builder) {
-            Some(bbox) => {
-                unsafe { *raw_bbox = bbox }
+        let mut b = Builder(builder, user_data);
+        match font_from_ptr(font).outline_glyph(glyph_id, &mut b) {
+            Some(bb) => {
+                unsafe { *bbox = bb }
                 true
             }
             None => false,
@@ -441,6 +491,14 @@ pub extern "C" fn ttfp_outline_glyph(
     }).unwrap_or(false)
 }
 
+/// @brief Returns a tight glyph bounding box.
+///
+/// Note that this method's performance depends on a table type the current font is using.
+/// In case of a `glyf` table, it's basically free, since this table stores
+/// bounding box separately. In case of `CFF` we should actually outline
+/// a glyph and then calculate its bounding box. So if you need an outline and
+/// a bounding box and you have an OpenType font (which uses CFF)
+/// then prefer #ttfp_outline_glyph method.
 #[no_mangle]
 pub extern "C" fn ttfp_outline_variable_glyph(
     font: *const ttfp_font,
@@ -469,13 +527,13 @@ pub extern "C" fn ttfp_outline_variable_glyph(
 pub extern "C" fn ttfp_get_glyph_bbox(
     font: *const ttfp_font,
     glyph_id: GlyphId,
-    raw_bbox: *mut ttf_parser::Rect,
+    bbox: *mut ttf_parser::Rect,
 ) -> bool {
     // This method invokes a lot of parsing, so let's catch any panics just in case.
     std::panic::catch_unwind(|| {
         match font_from_ptr(font).glyph_bounding_box(glyph_id) {
-            Some(bbox) => {
-                unsafe { *raw_bbox = bbox }
+            Some(bb) => {
+                unsafe { *bbox = bb }
                 true
             }
             None => false,
@@ -557,15 +615,6 @@ pub extern "C" fn ttfp_map_variation_coordinates(
     match font_from_ptr(font).map_variation_coordinates(coordinates) {
         Some(_) => true,
         None => false,
-    }
-}
-
-
-#[cfg(feature = "logging")]
-#[no_mangle]
-pub extern "C" fn ttfp_init_log() {
-    if let Ok(()) = log::set_logger(&logging::LOGGER) {
-        log::set_max_level(log::LevelFilter::Warn);
     }
 }
 

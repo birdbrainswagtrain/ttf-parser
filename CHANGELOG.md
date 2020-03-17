@@ -16,8 +16,19 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 - `Font::glyph_hor_side_bearing_variation`
 - `Font::glyph_ver_advance_variation`
 - `Font::glyph_ver_side_bearing_variation`
+- `Font::is_vertical`
 - `Tag` type.
 - Initial GSUB/GPOS support.
+
+### Removed
+- `Font::vertical_ascender`. Use `Font::ascender` instead.
+- `Font::vertical_descender`. Use `Font::descender` instead.
+- `Font::vertical_height`. Use `Font::height` instead.
+- `Font::vertical_line_gap`. Use `Font::line_gap` instead.
+- `Font::glyph_hor_advance`. Use `Font::glyph_advance` instead.
+- `Font::glyph_ver_advance`. Use `Font::glyph_advance` instead.
+- `Font::glyph_hor_side_bearing`. Use `Font::glyph_side_bearing` instead.
+- `Font::glyph_ver_side_bearing`. Use `Font::glyph_side_bearing` instead.
 
 ### Fixed
 - Multiple issues due to arithmetic overflow.

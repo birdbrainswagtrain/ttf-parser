@@ -31,8 +31,8 @@ Can be used as Rust and as C library.
   <br/>All subtable formats except Mixed Coverage (8) are supported.
 - (`cmap`) Character variation to glyph index mapping using [glyph_variation_index()] method.
 - (`glyf`) Glyph outlining using [outline_glyph()] method.
-- (`hmtx`) Retrieving glyph's horizontal metrics using [glyph_hor_advance()] and [glyph_hor_side_bearing()] methods.
-- (`vmtx`) Retrieving glyph's vertical metrics using [glyph_ver_advance()] and [glyph_ver_side_bearing()] methods.
+- (`hmtx`) Retrieving glyph's horizontal metrics using [glyph_advance()] and [glyph_side_bearing()] methods.
+- (`vmtx`) Retrieving glyph's vertical metrics using [glyph_advance()] and [glyph_side_bearing()] methods.
 - (`kern`) Retrieving glyphs pair kerning using [glyphs_kerning()] method.
 - (`maxp`) Retrieving total number of glyphs using [number_of_glyphs()] method.
 - (`name`) Listing all name records using [names()] method.
@@ -43,14 +43,14 @@ Can be used as Rust and as C library.
 - (`head`) Retrieving font's units per EM value using [units_per_em()] method.
 - (`hhea`) Retrieving generic font info using: [ascender()], [descender()], [height()]
   and [line_gap()] methods.
+- (`vhea`) Retrieving generic font info using: [ascender()], [descender()], [height()]
+  and [line_gap()] methods.
 
 [glyph_index()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_index
 [glyph_variation_index()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_variation_index
 [outline_glyph()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.outline_glyph
-[glyph_hor_advance()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_hor_advance
-[glyph_hor_side_bearing()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_hor_side_bearing
-[glyph_ver_advance()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_ver_advance
-[glyph_ver_side_bearing()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_ver_side_bearing
+[glyph_advance()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_advance
+[glyph_side_bearing()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyph_side_bearing
 [glyphs_kerning()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.glyphs_kerning
 [number_of_glyphs()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.number_of_glyphs
 [names()]: https://docs.rs/ttf-parser/0.4.0/ttf_parser/struct.Font.html#method.names
@@ -129,7 +129,7 @@ By doing so we can simplify an API quite a lot since otherwise, we will have to 
 
 Some methods may print warnings, when the `logging` feature is enabled.
 
-## Methods' computational complexity
+## Performance
 
 TrueType fonts designed for fast querying, so most of the methods are very fast.
 The main exception is glyph outlining. Glyphs can be stored using two different methods:
@@ -927,6 +927,14 @@ impl<'a> Font<'a> {
         try_opt_or!(self.os_2, false).is_oblique()
     }
 
+    /// Checks that font is vertical.
+    ///
+    /// Simply checks the presence of a `vhea` table.
+    #[inline]
+    pub fn is_vertical(&self) -> bool {
+        self.vhea.is_some()
+    }
+
     /// Checks if font is a variable font.
     #[inline]
     pub fn is_variable(&self) -> bool {
@@ -959,7 +967,11 @@ impl<'a> Font<'a> {
             }
         }
 
-        self.hhea.ascender()
+        if let Some(vhea) = self.vhea {
+            vhea.ascender()
+        } else {
+            self.hhea.ascender()
+        }
     }
 
     /// Returns font's descender value.
@@ -971,7 +983,11 @@ impl<'a> Font<'a> {
             }
         }
 
-        self.hhea.descender()
+        if let Some(vhea) = self.vhea {
+            vhea.descender()
+        } else {
+            self.hhea.descender()
+        }
     }
 
     /// Returns font's height.
@@ -989,41 +1005,11 @@ impl<'a> Font<'a> {
             }
         }
 
-        self.hhea.line_gap()
-    }
-
-    // TODO: should we automatically use the vhea?
-
-    /// Returns font's vertical ascender value.
-    ///
-    /// Returns `None` when `vhea` table is not present.
-    #[inline]
-    pub fn vertical_ascender(&self) -> Option<i16> {
-        self.vhea.map(|table| table.ascender())
-    }
-
-    /// Returns font's vertical descender value.
-    ///
-    /// Returns `None` when `vhea` table is not present.
-    #[inline]
-    pub fn vertical_descender(&self) -> Option<i16> {
-        self.vhea.map(|table| table.descender())
-    }
-
-    /// Returns font's vertical height.
-    ///
-    /// Returns `None` when `vhea` table is not present.
-    #[inline]
-    pub fn vertical_height(&self) -> Option<i16> {
-        Some(self.vertical_ascender()? - self.vertical_descender()?)
-    }
-
-    /// Returns font's vertical line gap.
-    ///
-    /// Returns `None` when `vhea` table is not present.
-    #[inline]
-    pub fn vertical_line_gap(&self) -> Option<i16> {
-        self.vhea.map(|table| table.line_gap())
+        if let Some(vhea) = self.vhea {
+            vhea.line_gap()
+        } else {
+            self.hhea.line_gap()
+        }
     }
 
     /// Returns glyphs index to location format.
@@ -1049,7 +1035,7 @@ impl<'a> Font<'a> {
         }
     }
 
-    /// Returns font's X height.
+    /// Returns font's x height.
     ///
     /// Returns `None` when OS/2 table is not present or when its version is < 2.
     #[inline]
@@ -1144,88 +1130,30 @@ impl<'a> Font<'a> {
         cmap::glyph_variation_index(self.cmap.as_ref()?, c, variation)
     }
 
-    /// Returns glyph's horizontal advance using
-    /// [Horizontal Metrics Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hmtx).
+    // TODO: maybe fallback to bbox when no hmtx/vmtx?
+
+    /// Returns glyph's advance using.
+    ///
+    /// Supports both horizontal and vertical fonts.
     #[inline]
-    pub fn glyph_hor_advance(&self, glyph_id: GlyphId) -> Option<u16> {
-        self.hmtx.and_then(|hmtx| hmtx.advance(glyph_id))
+    pub fn glyph_advance(&self, glyph_id: GlyphId) -> Option<u16> {
+        if self.is_vertical() {
+            self.vmtx.and_then(|vmtx| vmtx.advance(glyph_id))
+        } else {
+            self.hmtx.and_then(|hmtx| hmtx.advance(glyph_id))
+        }
     }
 
-    /// Returns glyph's variation offset for horizontal advance using
-    /// [Horizontal Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hvar).
+    /// Returns glyph's side bearing using.
     ///
-    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
-    ///
-    /// Returns `None` when `HVAR` table is not present or invalid.
-    pub fn glyph_hor_advance_variation(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[NormalizedCoord],
-    ) -> Option<f32> {
-        hvar::glyph_advance_variation(self.hvar?, glyph_id, coordinates)
-    }
-
-    /// Returns glyph's horizontal side bearing using
-    /// [Horizontal Metrics Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hmtx).
+    /// Supports both horizontal and vertical fonts.
     #[inline]
-    pub fn glyph_hor_side_bearing(&self, glyph_id: GlyphId) -> Option<i16> {
-        self.hmtx.and_then(|hmtx| hmtx.side_bearing(glyph_id))
-    }
-
-    /// Returns glyph's variation offset for horizontal side bearing using
-    /// [Horizontal Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/hvar).
-    ///
-    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
-    ///
-    /// Returns `None` when `HVAR` table is not present or invalid.
-    pub fn glyph_hor_side_bearing_variation(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[NormalizedCoord],
-    ) -> Option<f32> {
-        hvar::glyph_side_bearing_variation(self.hvar?, glyph_id, coordinates)
-    }
-
-    /// Returns glyph's vertical advance using
-    /// [Vertical Metrics Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vmtx).
-    #[inline]
-    pub fn glyph_ver_advance(&self, glyph_id: GlyphId) -> Option<u16> {
-        self.vmtx.and_then(|vmtx| vmtx.advance(glyph_id))
-    }
-
-    /// Returns glyph's variation offset for vertical advance using
-    /// [Vertical Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vvar).
-    ///
-    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
-    ///
-    /// Returns `None` when `VVAR` table is not present or invalid.
-    pub fn glyph_ver_advance_variation(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[NormalizedCoord],
-    ) -> Option<f32> {
-        crate::hvar::glyph_advance_variation(self.vvar?, glyph_id, coordinates)
-    }
-
-    /// Returns glyph's vertical side bearing using
-    /// [Vertical Metrics Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vmtx).
-    #[inline]
-    pub fn glyph_ver_side_bearing(&self, glyph_id: GlyphId) -> Option<i16> {
-        self.vmtx.and_then(|vmtx| vmtx.side_bearing(glyph_id))
-    }
-
-    /// Returns glyph's variation offset for vertical side bearing using
-    /// [Vertical Metrics Variations Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vvar).
-    ///
-    /// The number of `coordinates` should be the same as the amount of `variation_axes()`.
-    ///
-    /// Returns `None` when `VVAR` table is not present or invalid.
-    pub fn glyph_ver_side_bearing_variation(
-        &self,
-        glyph_id: GlyphId,
-        coordinates: &[NormalizedCoord],
-    ) -> Option<f32> {
-        crate::hvar::glyph_side_bearing_variation(self.vvar?, glyph_id, coordinates)
+    pub fn glyph_side_bearing(&self, glyph_id: GlyphId) -> Option<i16> {
+        if self.is_vertical() {
+            self.vmtx.and_then(|vmtx| vmtx.side_bearing(glyph_id))
+        } else {
+            self.hmtx.and_then(|hmtx| hmtx.side_bearing(glyph_id))
+        }
     }
 
     /// Returns a vertical origin of a glyph according to
