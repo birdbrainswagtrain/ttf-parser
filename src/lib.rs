@@ -502,7 +502,7 @@ pub struct Font<'a> {
     hvar: Option<hvar::Table<'a>>,
     kern: Option<&'a [u8]>,
     loca: Option<loca::Table<'a>>,
-    mvar: Option<&'a [u8]>,
+    mvar: Option<mvar::Table<'a>>,
     name: Option<name::Names<'a>>,
     os_2: Option<os2::Table<'a>>,
     post: Option<post::Table<'a>>,
@@ -600,7 +600,7 @@ impl<'a> Font<'a> {
                 b"GPOS" => gpos = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
                 b"GSUB" => gsub = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
                 b"HVAR" => hvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
-                b"MVAR" => mvar = data.get(range),
+                b"MVAR" => mvar = data.get(range).and_then(|data| mvar::Table::parse(data)),
                 b"OS/2" => os_2 = data.get(range).and_then(|data| os2::Table::parse(data)),
                 b"VORG" => vorg = data.get(range).and_then(|data| vorg::Table::parse(data)),
                 b"VVAR" => vvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
@@ -1273,7 +1273,7 @@ impl<'a> Font<'a> {
 
     #[inline]
     fn metrics_var_offset(&self, tag: Tag) -> f32 {
-        self.mvar.and_then(|table| mvar::metrics_offset(table, tag, self.coords())).unwrap_or(0.0)
+        self.mvar.and_then(|table| mvar::metrics_offset(&table, tag, self.coords())).unwrap_or(0.0)
     }
 
     #[inline]
