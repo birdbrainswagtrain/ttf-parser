@@ -108,7 +108,7 @@ The [benchmark](./benches/outline/) tests how long it takes to outline all glyph
 | Table/Library | ttf-parser         | FreeType       | stb_truetype     |
 | ------------- | -----------------: | -------------: | ---------------: |
 | `glyf`        |     `786'180 ns`   | `1'194'395 ns` | **`695'873 ns`** |
-| `gvar`        | **`3'487'405 ns`** | `3'594'170 ns` |                - |
+| `gvar`        | **`3'119'105 ns`** | `3'594'170 ns` |                - |
 | `CFF`         | **`1'237'364 ns`** | `5'806'994 ns` |  `2'862'264 ns`  |
 | `CFF2`        | **`1'893'664 ns`** | `6'782'960 ns` |                - |
 

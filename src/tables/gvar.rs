@@ -155,6 +155,7 @@ fn outline_var_impl<'a>(
     // Instead, we have to manually calculate outline's bbox.
     s.advance(8);
 
+    // TODO: This is the most expensive part. Find a way to allocate it only once.
     // `VariationTuples` is a very large struct, so allocate it once.
     let mut tuples = VariationTuples {
         headers: [VariationTuple::default(); MAX_TUPLES_LEN as usize],
@@ -301,7 +302,7 @@ struct VariationTuple<'a> {
 ///
 /// The TrueType spec allows up to 4095 tuples, which is way larger
 /// than we do. But in reality, an average font will have less than 10 tuples.
-const MAX_TUPLES_LEN: u16 = 32;
+const MAX_TUPLES_LEN: u16 = 16;
 
 /// A list of variation tuples.
 ///
@@ -310,7 +311,7 @@ const MAX_TUPLES_LEN: u16 = 32;
 /// This is probably unavoidable due to `gvar` structure,
 /// since we have to iterate all tuples in parallel.
 struct VariationTuples<'a> {
-    headers: [VariationTuple<'a>; MAX_TUPLES_LEN as usize], // 2560B
+    headers: [VariationTuple<'a>; MAX_TUPLES_LEN as usize], // 1280B
     len: u16,
 }
 
