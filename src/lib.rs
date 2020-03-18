@@ -469,7 +469,7 @@ impl VarCoords {
 /// A font data handle.
 #[derive(Clone)]
 pub struct Font<'a> {
-    avar: Option<&'a [u8]>,
+    avar: Option<avar::Table<'a>>,
     cff_: Option<cff::Metadata<'a>>,
     cff2: Option<cff2::Metadata<'a>>,
     cmap: Option<cmap::Table<'a>>,
@@ -587,7 +587,7 @@ impl<'a> Font<'a> {
                 b"OS/2" => os_2 = data.get(range).and_then(|data| os2::Table::parse(data)),
                 b"VORG" => vorg = data.get(range).and_then(|data| vorg::Table::parse(data)),
                 b"VVAR" => vvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
-                b"avar" => avar = data.get(range),
+                b"avar" => avar = data.get(range).and_then(|data| avar::Table::parse(data)),
                 b"cmap" => cmap = data.get(range).and_then(|data| cmap::Table::parse(data)),
                 b"fvar" => fvar = data.get(range).and_then(|data| fvar::Table::parse(data)),
                 b"glyf" => glyf = data.get(range),
@@ -1252,7 +1252,7 @@ impl<'a> Font<'a> {
         // TODO: optimize
         if let Some(avar) = self.avar {
             // Ignore error.
-            let _ = avar::map_variation_coordinates(avar, self.coordinates.as_mut_slice());
+            let _ = avar.map_coordinates(self.coordinates.as_mut_slice());
         }
 
         Some(())
