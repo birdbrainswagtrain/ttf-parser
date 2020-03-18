@@ -1008,7 +1008,7 @@ impl<'a> Font<'a> {
     ///
     /// This method is affected by variation axes.
     #[inline]
-    pub fn glyph_advance(&self, glyph_id: GlyphId) -> Option<f32> {
+    pub fn glyph_advance(&self, glyph_id: GlyphId) -> Option<u16> {
         let mut advance = if self.is_vertical() {
             self.vmtx.and_then(|vmtx| vmtx.advance(glyph_id))
         } else {
@@ -1020,7 +1020,7 @@ impl<'a> Font<'a> {
             advance += hvar::glyph_advance_offset(data?, glyph_id, self.coords())?;
         }
 
-        Some(advance)
+        u16::try_num_from(advance)
     }
 
     /// Returns glyph's side bearing.
@@ -1029,7 +1029,7 @@ impl<'a> Font<'a> {
     ///
     /// This method is affected by variation axes.
     #[inline]
-    pub fn glyph_side_bearing(&self, glyph_id: GlyphId) -> Option<f32> {
+    pub fn glyph_side_bearing(&self, glyph_id: GlyphId) -> Option<i16> {
         let mut bearing = if self.is_vertical() {
             self.vmtx.and_then(|vmtx| vmtx.side_bearing(glyph_id))
         } else {
@@ -1041,7 +1041,7 @@ impl<'a> Font<'a> {
             bearing += hvar::glyph_side_bearing_offset(data?, glyph_id, self.coords())?;
         }
 
-        Some(bearing)
+        i16::try_num_from(bearing)
     }
 
     /// Returns a vertical origin of a glyph according to

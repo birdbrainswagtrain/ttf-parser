@@ -468,8 +468,8 @@ pub extern "C" fn ttfp_get_glyph_var_index(
 ///
 /// @return Glyph's advance or 0 when not set.
 #[no_mangle]
-pub extern "C" fn ttfp_get_glyph_advance(font: *const ttfp_font, glyph_id: GlyphId) -> f32 {
-    font_from_ptr(font).glyph_advance(glyph_id).unwrap_or(0.0)
+pub extern "C" fn ttfp_get_glyph_advance(font: *const ttfp_font, glyph_id: GlyphId) -> u16 {
+    font_from_ptr(font).glyph_advance(glyph_id).unwrap_or(0)
 }
 
 /// @brief Returns glyph's side bearing.
@@ -480,8 +480,8 @@ pub extern "C" fn ttfp_get_glyph_advance(font: *const ttfp_font, glyph_id: Glyph
 ///
 /// @return Glyph's side bearing or 0 when not set.
 #[no_mangle]
-pub extern "C" fn ttfp_get_glyph_side_bearing(font: *const ttfp_font, glyph_id: GlyphId) -> f32 {
-    font_from_ptr(font).glyph_side_bearing(glyph_id).unwrap_or(0.0)
+pub extern "C" fn ttfp_get_glyph_side_bearing(font: *const ttfp_font, glyph_id: GlyphId) -> i16 {
+    font_from_ptr(font).glyph_side_bearing(glyph_id).unwrap_or(0)
 }
 
 /// @brief Returns a vertical origin of a glyph.
