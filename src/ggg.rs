@@ -38,27 +38,33 @@ impl<'a> GsubGposTable<'a> {
 
         {
             let data = data.get(script_list_offset.to_usize()..)?;
+            let mut s = Stream::new(data);
+            let count: u16 = s.read()?;
             table.script = Scripts {
                 data,
-                records: Stream::new(data).read_count_and_array16()?,
+                records: s.read_array16(count)?,
                 index: 0,
             };
         }
 
         {
             let data = data.get(feature_list_offset.to_usize()..)?;
+            let mut s = Stream::new(data);
+            let count: u16 = s.read()?;
             table.features = Features {
                 data,
-                records: Stream::new(data).read_count_and_array16()?,
+                records: s.read_array16(count)?,
                 index: 0,
             };
         }
 
         {
             let data = data.get(lookup_list_offset.to_usize()..)?;
+            let mut s = Stream::new(data);
+            let count: u16 = s.read()?;
             table.lookups = Lookups {
                 data,
-                records: Stream::new(data).read_count_and_array16()?,
+                records: s.read_array16(count)?,
                 index: 0,
             };
         }
@@ -68,9 +74,11 @@ impl<'a> GsubGposTable<'a> {
             let mut s = Stream::new(data);
             s.skip::<u16>(); // majorVersion
             s.skip::<u16>(); // minorVersion
+            let count: u32 = s.read()?;
+            let records = s.read_array32(count)?;
             table.feature_variations = FeatureVariations {
                 data,
-                records: s.read_count_and_array32()?,
+                records,
                 index: 0,
             };
         }
@@ -207,7 +215,8 @@ impl<'a> Iterator for Scripts<'a> {
         let data = self.data.get(record.offset().to_usize()..)?;
         let mut s = Stream::new(data);
         let default_lang: Option<Offset16> = s.read()?;
-        let records = s.read_count_and_array16()?;
+        let count: u16 = s.read()?;
+        let records = s.read_array16(count)?;
         Some(Script {
             data,
             script: record.tag(),
@@ -355,9 +364,10 @@ impl<'a> Iterator for Features<'a> {
         let data = self.data.get(record.offset().to_usize()..)?;
         let mut s = Stream::new(data);
         s.skip::<Offset16>(); // featureParams
+        let count: u16 = s.read()?;
         Some(Feature {
             tag: record.tag(),
-            lookup_indices: s.read_count_and_array16()?,
+            lookup_indices: s.read_array16(count)?,
         })
     }
 }
@@ -479,9 +489,11 @@ impl<'a> FeatureVariation<'a> {
 
     fn condition_set(&self) -> Option<ConditionSet<'a>> {
         let data = self.data.get(self.condition_set_offset.to_usize()..)?;
+        let mut s = Stream::new(data);
+        let count: u16 = s.read()?;
         Some(ConditionSet {
             data,
-            offsets: Stream::new(data).read_count_and_array16()?,
+            offsets: s.read_array16(count)?,
             index: 0,
         })
     }
@@ -492,9 +504,10 @@ impl<'a> FeatureVariation<'a> {
         let mut s = Stream::new(data);
         s.skip::<u16>(); // majorVersion
         s.skip::<u16>(); // minorVersion
+        let count: u16 = s.read()?;
         Some(FeatureSubstitutions {
             data,
-            records: s.read_count_and_array16()?,
+            records: s.read_array16(count)?,
             index: 0,
         })
     }
@@ -634,10 +647,12 @@ impl<'a> CoverageTable<'a> {
 
         match format {
             1 => {
-                s.read_count_and_array16::<GlyphId>().unwrap().binary_search(&glyph_id).is_some()
+                let count = try_opt_or!(s.read::<u16>(), false);
+                s.read_array16::<GlyphId>(count).unwrap().binary_search(&glyph_id).is_some()
             }
             2 => {
-                let records = try_opt_or!(s.read_count_and_array16::<crate::raw::gdef::RangeRecord>(), false);
+                let count = try_opt_or!(s.read::<u16>(), false);
+                let records = try_opt_or!(s.read_array16::<crate::raw::gdef::RangeRecord>(count), false);
                 records.into_iter().any(|r| r.range().contains(&glyph_id))
             }
             _ => false,
@@ -686,11 +701,13 @@ impl<'a> ClassDefinitionTable<'a> {
                     return None;
                 }
 
-                let classes = s.read_count_and_array16::<Class>()?;
+                let count: u16 = s.read()?;
+                let classes = s.read_array16::<Class>(count)?;
                 classes.get(glyph_id.0 - start_glyph_id.0)
             }
             2 => {
-                let records = s.read_count_and_array16::<crate::raw::gdef::ClassRangeRecord>()?;
+                let count: u16 = s.read()?;
+                let records = s.read_array16::<crate::raw::gdef::ClassRangeRecord>(count)?;
                 records.into_iter().find(|r| r.range().contains(&glyph_id))
                     .map(|record| Class(record.class()))
             }

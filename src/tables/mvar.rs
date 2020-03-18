@@ -70,7 +70,8 @@ pub(crate) fn parse_item_variation_store(
     }
 
     let variation_region_list_offset: Offset32 = s.read()?;
-    let item_variation_data_offsets = s.read_count_and_array16::<Offset32>()?;
+    let count: u16 = s.read()?;
+    let item_variation_data_offsets = s.read_array16::<Offset32>(count)?;
 
     let var_data_offset = item_variation_data_offsets.get(outer_index)?;
     let mut s = orig.clone();

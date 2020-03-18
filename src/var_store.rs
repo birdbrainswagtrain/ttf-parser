@@ -98,7 +98,8 @@ impl<'a> ItemVariationStore<'a> {
         }
 
         let region_list_offset: u32 = s.read()?;
-        let offsets = s.read_count_and_array16::<u32>()?;
+        let count: u16 = s.read()?;
+        let offsets = s.read_array16::<u32>(count)?;
 
         let regions = {
             regions_s.advance(usize::num_from(region_list_offset));
@@ -122,6 +123,7 @@ impl<'a> ItemVariationStore<'a> {
         let mut s = Stream::new_at(self.data, offset as usize);
         s.skip::<u16>(); // item_count
         s.skip::<u16>(); // short_delta_count
-        s.read_count_and_array16()
+        let count: u16 = s.read()?;
+        s.read_array16(count)
     }
 }
