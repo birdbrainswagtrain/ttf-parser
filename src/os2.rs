@@ -239,7 +239,7 @@ impl<'a> Table<'a> {
         if self.version < 2 {
             None
         } else {
-            // We cannot use SafeStream here, because X height is an optional data.
+            // We cannot use SafeStream here, because x height is an optional data.
             Stream::read_at(self.data, raw::SX_HEIGHT_OFFSET)
         }
     }

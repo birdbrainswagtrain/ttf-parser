@@ -25,7 +25,7 @@ pub(crate) fn map_variation_coordinates(
     }
 
     for i in 0..axis_count {
-        let map = s.read_array16::<raw::AxisValueMapRecord>()?;
+        let map = s.read_count_and_array16::<raw::AxisValueMapRecord>()?;
         coordinates[i] = NormalizedCoord::from(map_value(&map, coordinates[i].0));
     }
 

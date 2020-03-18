@@ -21,6 +21,7 @@ A high-level, safe, zero-allocation TrueType font parser.
 - All recursive methods have a depth limit.
 - Technically, should use less than 64KiB of stack in worst case scenario.
 - Most of arithmetic operations are checked.
+- Most of numeric casts are checked.
 
 ## Error handling
 
@@ -100,7 +101,7 @@ mod var_store;
 #[cfg(feature = "std")]
 mod writer;
 
-use parser::{Stream, SafeStream, Offset, TryNumConv, i16_bound, f32_bound};
+use parser::{Stream, SafeStream, Offset, NumConv, TryNumConv, i16_bound, f32_bound};
 pub use fvar::{VariationAxes, VariationAxis};
 pub use gdef::GlyphClass;
 pub use ggg::*;
@@ -108,7 +109,7 @@ pub use gpos::PositioningTable;
 pub use gsub::SubstitutionTable;
 pub use name::*;
 pub use os2::*;
-pub use parser::{FromData, ArraySize, LazyArray, LazyArray16, LazyArray32, LazyArrayIter};
+pub use parser::{FromData, LazyArray16, LazyArray32, LazyArrayIter16, LazyArrayIter32};
 
 
 /// A type-safe wrapper for glyph ID.
@@ -530,9 +531,9 @@ impl<'a> Font<'a> {
             if index < n {
                 // https://docs.microsoft.com/en-us/typography/opentype/spec/otff#ttc-header
                 const OFFSET_32_SIZE: usize = 4;
-                let offset = raw::TTCHeader::SIZE + OFFSET_32_SIZE * index as usize;
+                let offset = raw::TTCHeader::SIZE + OFFSET_32_SIZE * usize::num_from(index);
                 let font_offset: u32 = Stream::read_at(data, offset)?;
-                data.get(font_offset as usize .. data.len())?
+                data.get(usize::num_from(font_offset) .. data.len())?
             } else {
                 return None;
             }
@@ -558,8 +559,8 @@ impl<'a> Font<'a> {
         }
 
         let num_tables: u16 = s.read()?;
-        s.advance(6u32); // searchRange (u16) + entrySelector (u16) + rangeShift (u16)
-        let tables = s.read_array::<raw::TableRecord, u16>(num_tables)?;
+        s.advance(6); // searchRange (u16) + entrySelector (u16) + rangeShift (u16)
+        let tables = s.read_array16::<raw::TableRecord>(num_tables)?;
 
         let mut cff_ = None;
         let mut cff2 = None;
@@ -588,7 +589,7 @@ impl<'a> Font<'a> {
         let mut vmtx = None;
         for table in tables {
             let offset = table.offset().to_usize();
-            let length = table.length() as usize;
+            let length = usize::num_from(table.length());
             let range = offset..(offset + length);
 
             // It's way faster to compare `[u8; 4]` with `&[u8]`
@@ -1088,13 +1089,15 @@ impl<'a> Font<'a> {
     }
 
     /// Checks that font has
-    /// [Glyph Class Definition Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#glyph-class-definition-table).
+    /// [Glyph Class Definition Table](
+    /// https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#glyph-class-definition-table).
     pub fn has_glyph_classes(&self) -> bool {
         self.glyph_class(GlyphId(0)).is_some()
     }
 
     /// Returns glyph's class according to
-    /// [Glyph Class Definition Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#glyph-class-definition-table).
+    /// [Glyph Class Definition Table](
+    /// https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#glyph-class-definition-table).
     ///
     /// Returns `None` when *Glyph Class Definition Table* is not set
     /// or glyph class is not set or invalid.
@@ -1103,7 +1106,8 @@ impl<'a> Font<'a> {
     }
 
     /// Returns glyph's mark attachment class according to
-    /// [Mark Attachment Class Definition Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#mark-attachment-class-definition-table).
+    /// [Mark Attachment Class Definition Table](
+    /// https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#mark-attachment-class-definition-table).
     ///
     /// All glyphs not assigned to a class fall into Class 0.
     pub fn glyph_mark_attachment_class(&self, glyph_id: GlyphId) -> Class {
@@ -1111,7 +1115,8 @@ impl<'a> Font<'a> {
     }
 
     /// Checks that glyph is a mark according to
-    /// [Mark Glyph Sets Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#mark-glyph-sets-table).
+    /// [Mark Glyph Sets Table](
+    /// https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#mark-glyph-sets-table).
     ///
     /// `set_index` allows checking a specific glyph coverage set.
     /// Otherwise all sets will be checked.

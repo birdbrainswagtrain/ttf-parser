@@ -3,7 +3,7 @@
 //! https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#item-variation-store
 
 use crate::NormalizedCoord;
-use crate::parser::{Stream, LazyArray16};
+use crate::parser::{Stream, LazyArray16, NumConv};
 
 #[derive(Clone, Copy)]
 pub struct VariationRegionList<'a> {
@@ -98,17 +98,17 @@ impl<'a> ItemVariationStore<'a> {
         }
 
         let region_list_offset: u32 = s.read()?;
-        let offsets = s.read_array16::<u32>()?;
+        let offsets = s.read_count_and_array16::<u32>()?;
 
         let regions = {
-            regions_s.advance(region_list_offset);
+            regions_s.advance(usize::num_from(region_list_offset));
             // TODO: should be the same as in `fvar`
             let axis_count = regions_s.read::<u16>()?;
             let count = regions_s.read::<u16>()?;
             let total = count.checked_mul(axis_count)?;
             VariationRegionList {
                 axis_count,
-                regions: regions_s.read_array(total)?,
+                regions: regions_s.read_array16(total)?,
             }
         };
 
@@ -122,6 +122,6 @@ impl<'a> ItemVariationStore<'a> {
         let mut s = Stream::new_at(self.data, offset as usize);
         s.skip::<u16>(); // item_count
         s.skip::<u16>(); // short_delta_count
-        s.read_array16()
+        s.read_count_and_array16()
     }
 }

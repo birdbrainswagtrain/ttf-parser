@@ -3,7 +3,7 @@
 use core::num::NonZeroU16;
 
 use crate::{Tag, NormalizedCoord};
-use crate::parser::{Stream, Offset16, Offset, LazyArray16, LazyArrayIter, f32_bound};
+use crate::parser::{Stream, Offset16, Offset, LazyArray16, LazyArrayIter16, f32_bound};
 use crate::raw::fvar as raw;
 
 
@@ -64,7 +64,7 @@ impl<'a> Table<'a> {
         let axis_count = NonZeroU16::new(axis_count)?;
 
         let mut s = Stream::new_at(data, axes_array_offset.to_usize());
-        let axes = s.read_array(axis_count.get())?;
+        let axes = s.read_array16(axis_count.get())?;
 
         Some(Table { axes })
     }
@@ -81,7 +81,7 @@ impl<'a> Table<'a> {
 #[allow(missing_debug_implementations)]
 #[derive(Clone, Copy, Default)]
 pub struct VariationAxes<'a> {
-    iter: LazyArrayIter<'a, raw::VariationAxisRecord, u16>,
+    iter: LazyArrayIter16<'a, raw::VariationAxisRecord>,
 }
 
 impl<'a> Iterator for VariationAxes<'a> {

@@ -51,7 +51,7 @@ impl<'a> Table<'a> {
         let shared_tuple_records = {
             let mut sub_s = Stream::new_at(data, shared_tuples_offset.to_usize());
             // TODO: check overflow
-            sub_s.read_array(shared_tuple_count * axis_count.get())?
+            sub_s.read_array16(shared_tuple_count * axis_count.get())?
         };
 
         let glyphs_variation_data = data.get(glyph_variation_data_array_offset.to_usize()..)?;
@@ -59,9 +59,9 @@ impl<'a> Table<'a> {
             let offsets_count = glyph_count.checked_add(1)?;
             let is_long_format = flags & 1 == 1; // The first bit indicates a long format.
             if is_long_format {
-                GlyphVariationDataOffsets::Long(s.read_array(offsets_count)?)
+                GlyphVariationDataOffsets::Long(s.read_array16(offsets_count)?)
             } else {
-                GlyphVariationDataOffsets::Short(s.read_array(offsets_count)?)
+                GlyphVariationDataOffsets::Short(s.read_array16(offsets_count)?)
             }
         };
 
@@ -152,7 +152,7 @@ fn outline_var_impl<'a>(
     // In case of a variable font, a bounding box defined in the `glyf` data
     // refers to the default variation values. Which is not what we want.
     // Instead, we have to manually calculate outline's bbox.
-    s.advance(8u32);
+    s.advance(8);
 
     // `VariationTuples` is a very large struct, so allocate it once.
     let mut tuples = VariationTuples {
@@ -427,7 +427,7 @@ fn parse_variation_tuples<'a>(
         let header = parse_tuple_variation_header(coordinates, shared_tuple_records, &mut main_s)?;
         if !(header.scalar > 0.0) {
             // Serialized data for headers with non-positive scalar should be skipped.
-            serialized_s.advance(header.serialized_data_len);
+            serialized_s.advance(usize::from(header.serialized_data_len));
             continue;
         }
 
@@ -457,7 +457,7 @@ fn parse_variation_tuples<'a>(
             // Use `checked_sub` in case we went over the `serialized_data_len`.
             let left = usize::from(header.serialized_data_len)
                 .checked_sub(serialized_s.offset() - serialized_data_start)?;
-            let deltas_data = serialized_s.read_bytes(left as u32)?;
+            let deltas_data = serialized_s.read_bytes(left)?;
             PackedDeltasIter::new(header.scalar, deltas_count, deltas_data)
         };
 
@@ -496,7 +496,7 @@ fn parse_tuple_variation_header(
     let axis_count = coordinates.len() as u16;
 
     let peak_tuple = if has_embedded_peak_tuple {
-        s.read_array(axis_count)?
+        s.read_array16(axis_count)?
     } else {
         // Use shared tuples.
         let start = tuple_index.checked_mul(axis_count)?;
@@ -505,7 +505,7 @@ fn parse_tuple_variation_header(
     };
 
     let (start_tuple, end_tuple) = if has_intermediate_region {
-        (s.read_array(axis_count)?, s.read_array(axis_count)?)
+        (s.read_array16(axis_count)?, s.read_array16(axis_count)?)
     } else {
         (LazyArray16::<F2DOT14>::default(), LazyArray16::<F2DOT14>::default())
     };
@@ -633,7 +633,7 @@ mod packed_points {
                 let run_count = u16::from(control.run_count());
                 let is_points_are_words = control.is_points_are_words();
                 // Do not actually parse the number, simply advance.
-                s.advance_checked(if is_points_are_words { 2u16 } else { 1u16 } * run_count)?;
+                s.advance_checked(if is_points_are_words { 2 } else { 1 } * usize::from(run_count))?;
                 i += run_count;
             }
 

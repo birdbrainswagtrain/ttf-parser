@@ -60,10 +60,10 @@ impl<'a> DeltaSetIndexMap<'a> {
         let entry_size = ((entry_format >> 4) & 3) + 1;
         let inner_index_bit_count = ((entry_format & 0xF) + 1) as u32;
 
-        s.advance(entry_size as u32 * idx as u32);
+        s.advance(usize::from(entry_size) * usize::from(idx));
 
         let mut n = 0u32;
-        for b in s.read_bytes(entry_size)? {
+        for b in s.read_bytes(usize::from(entry_size))? {
             n = (n << 8) + *b as u32;
         }
 

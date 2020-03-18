@@ -4,7 +4,7 @@ use core::num::NonZeroU16;
 use core::ops::Range;
 
 use crate::{GlyphId, IndexToLocationFormat};
-use crate::parser::{Stream, LazyArray16};
+use crate::parser::{Stream, LazyArray16, NumConv};
 
 #[derive(Clone, Copy)]
 pub enum Table<'a> {
@@ -30,10 +30,10 @@ impl<'a> Table<'a> {
         let mut s = Stream::new(data);
         match format {
             IndexToLocationFormat::Short => {
-                Some(Table::Short(s.read_array(total)?))
+                Some(Table::Short(s.read_array16(total)?))
             }
             IndexToLocationFormat::Long => {
-                Some(Table::Long(s.read_array(total)?))
+                Some(Table::Long(s.read_array16(total)?))
             }
         }
     }
@@ -61,10 +61,10 @@ impl<'a> Table<'a> {
         let range = match self {
             Table::Short(ref array) => {
                 // 'The actual local offset divided by 2 is stored.'
-                array.at(glyph_id) as usize * 2 .. array.at(glyph_id + 1) as usize * 2
+                usize::from(array.at(glyph_id)) * 2 .. usize::from(array.at(glyph_id + 1)) * 2
             }
             Table::Long(ref array) => {
-                array.at(glyph_id) as usize .. array.at(glyph_id + 1) as usize
+                usize::num_from(array.at(glyph_id)) .. usize::num_from(array.at(glyph_id + 1))
             }
         };
 

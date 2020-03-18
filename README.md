@@ -30,6 +30,7 @@ Can be used as Rust and as C library.
 - All recursive methods have a depth limit.
 - Technically, should use less than 64KiB of stack in worst case scenario.
 - Most of arithmetic operations are checked.
+- Most of numeric casts are checked.
 
 ### Alternatives
 
@@ -46,9 +47,10 @@ There are roughly three types of TrueType tables:
 | Feature/Library   | ttf-parser             | FreeType            | stb_truetype                   |
 | ----------------- | :--------------------: | :-----------------: | :----------------------------: |
 | Memory safe       | ✓                      |                     |                                |
-| Thread safe       | ✓                      |                     |                                |
+| Thread safe       | ✓                      |                     | ~<sup>1</sup>                  |
 | Zero allocation   | ✓                      |                     |                                |
 | Variable fonts    | ✓                      | ✓                   |                                |
+| Rendering         |                        | ✓                   | ~<sup>2</sup>                  |
 | `avar` table      | ✓                      | ✓                   |                                |
 | `CFF `&nbsp;table | ✓                      | ✓                   | ✓                              |
 | `CFF2` table      | ✓                      | ✓                   |                                |
@@ -75,9 +77,8 @@ There are roughly three types of TrueType tables:
 | `vmtx` table      | ✓                      | ✓                   |                                |
 | `VORG` table      | ✓                      | ✓                   |                                |
 | `VVAR` table      | ✓                      | ✓                   |                                |
-| Rendering         |                        | ✓                   | ~<sup>1</sup>                  |
 | Language          | Rust + C API           | C                   | C                              |
-| Dynamic lib size  | ~250KiB                | ~760KiB<sup>2</sup> | ? (header-only)                |
+| Dynamic lib size  | ~250KiB                | ~760KiB<sup>3</sup> | ? (header-only)                |
 | Tested version    | 0.4.0                  | 2.9.1               | 1.24                           |
 | License           | MIT / Apache-2.0       | FTL/GPLv2           | public domain                  |
 
@@ -89,8 +90,9 @@ Legend:
 
 Notes:
 
-1. Very primitive.
-2. Depends on build flags.
+1. `stb_truetype` outline parsing method is reentrant.
+2. Very primitive.
+3. Depends on build flags.
 
 ### Performance
 

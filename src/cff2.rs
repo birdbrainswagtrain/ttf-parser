@@ -5,7 +5,7 @@ use core::convert::TryFrom;
 use core::ops::Range;
 
 use crate::{GlyphId, OutlineBuilder, Rect, BBox, NormalizedCoord};
-use crate::parser::{Stream, TryNumConv};
+use crate::parser::{Stream, NumConv, TryNumConv};
 use crate::var_store::*;
 use crate::cff::{
     Builder, DataIndex, IsEven, Operator, ArgumentsStack, CFFError,
@@ -97,10 +97,10 @@ pub(crate) fn parse_metadata(data: &[u8]) -> Option<Metadata> {
 
     // Jump to Top DICT. It's not necessarily right after the header.
     if header_size > s.offset() as u8 {
-        s.advance(header_size as u32 - s.offset() as u32);
+        s.advance(usize::from(header_size) - s.offset());
     }
 
-    let top_dict_data = s.read_bytes(top_dict_length)?;
+    let top_dict_data = s.read_bytes(usize::from(top_dict_length))?;
     let top_dict = parse_top_dict(top_dict_data)?;
 
     let mut metadata = Metadata::default();
@@ -716,7 +716,7 @@ fn _parse_char_string(
             }
             operator::HINT_MASK | operator::COUNTER_MASK => {
                 ctx.stems_len += stack.len() as u32 >> 1;
-                s.advance((ctx.stems_len + 7) >> 3);
+                s.advance(usize::num_from((ctx.stems_len + 7) >> 3));
 
                 // We are ignoring the hint operators.
                 stack.clear();

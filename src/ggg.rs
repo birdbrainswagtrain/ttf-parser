@@ -40,7 +40,7 @@ impl<'a> GsubGposTable<'a> {
             let data = data.get(script_list_offset.to_usize()..)?;
             table.script = Scripts {
                 data,
-                records: Stream::new(data).read_array16()?,
+                records: Stream::new(data).read_count_and_array16()?,
                 index: 0,
             };
         }
@@ -49,7 +49,7 @@ impl<'a> GsubGposTable<'a> {
             let data = data.get(feature_list_offset.to_usize()..)?;
             table.features = Features {
                 data,
-                records: Stream::new(data).read_array16()?,
+                records: Stream::new(data).read_count_and_array16()?,
                 index: 0,
             };
         }
@@ -58,7 +58,7 @@ impl<'a> GsubGposTable<'a> {
             let data = data.get(lookup_list_offset.to_usize()..)?;
             table.lookups = Lookups {
                 data,
-                records: Stream::new(data).read_array16()?,
+                records: Stream::new(data).read_count_and_array16()?,
                 index: 0,
             };
         }
@@ -70,7 +70,7 @@ impl<'a> GsubGposTable<'a> {
             s.skip::<u16>(); // minorVersion
             table.feature_variations = FeatureVariations {
                 data,
-                records: s.read_array32()?,
+                records: s.read_count_and_array32()?,
                 index: 0,
             };
         }
@@ -199,7 +199,7 @@ impl<'a> Iterator for Scripts<'a> {
     }
 
     fn count(self) -> usize {
-        self.records.len().to_usize()
+        usize::from(self.records.len())
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -207,7 +207,7 @@ impl<'a> Iterator for Scripts<'a> {
         let data = self.data.get(record.offset().to_usize()..)?;
         let mut s = Stream::new(data);
         let default_lang: Option<Offset16> = s.read()?;
-        let records = s.read_array16()?;
+        let records = s.read_count_and_array16()?;
         Some(Script {
             data,
             script: record.tag(),
@@ -290,7 +290,7 @@ impl<'a> Iterator for Languages<'a> {
     }
 
     fn count(self) -> usize {
-        self.records.len().to_usize()
+        usize::from(self.records.len())
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -313,7 +313,7 @@ fn parse_lang_sys_table(data: &[u8], tag: Option<Tag>) -> Option<Language> {
     Some(Language {
         tag: tag.unwrap_or_else(|| Tag::from_bytes(b"DFLT")),
         required_feature_index,
-        feature_indices: s.read_array(count)?,
+        feature_indices: s.read_array16(count)?,
     })
 }
 
@@ -347,7 +347,7 @@ impl<'a> Iterator for Features<'a> {
     }
 
     fn count(self) -> usize {
-        self.records.len().to_usize()
+        usize::from(self.records.len())
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -357,7 +357,7 @@ impl<'a> Iterator for Features<'a> {
         s.skip::<Offset16>(); // featureParams
         Some(Feature {
             tag: record.tag(),
-            lookup_indices: s.read_array16()?,
+            lookup_indices: s.read_count_and_array16()?,
         })
     }
 }
@@ -391,7 +391,7 @@ impl<'a> Iterator for Lookups<'a> {
     }
 
     fn count(self) -> usize {
-        self.records.len().to_usize()
+        usize::from(self.records.len())
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -418,7 +418,7 @@ impl<'a> Iterator for Lookups<'a> {
 pub struct Lookup<'a> {
     lookup_type: u16,
     lookup_flag: u16,
-    offsets: Offsets16<'a>,
+    offsets: Offsets16<'a, Offset16>,
     mark_filtering_set: u16, // TODO: optional
 }
 
@@ -441,7 +441,7 @@ impl<'a> Iterator for FeatureVariations<'a> {
     }
 
     fn count(self) -> usize {
-        self.records.len().to_usize()
+        usize::num_from(self.records.len())
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -481,7 +481,7 @@ impl<'a> FeatureVariation<'a> {
         let data = self.data.get(self.condition_set_offset.to_usize()..)?;
         Some(ConditionSet {
             data,
-            offsets: Stream::new(data).read_array16()?,
+            offsets: Stream::new(data).read_count_and_array16()?,
             index: 0,
         })
     }
@@ -494,7 +494,7 @@ impl<'a> FeatureVariation<'a> {
         s.skip::<u16>(); // minorVersion
         Some(FeatureSubstitutions {
             data,
-            records: s.read_array16()?,
+            records: s.read_count_and_array16()?,
             index: 0,
         })
     }
@@ -517,7 +517,7 @@ impl<'a> Iterator for ConditionSet<'a> {
     }
 
     fn count(self) -> usize {
-        self.offsets.len().to_usize()
+        usize::from(self.offsets.len())
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -557,7 +557,7 @@ impl<'a> Iterator for FeatureSubstitutions<'a> {
     }
 
     fn count(self) -> usize {
-        self.records.len().to_usize()
+        usize::from(self.records.len())
     }
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
@@ -611,7 +611,7 @@ impl<'a> FeatureSubstitution<'a> {
         let count: u16 = s.read()?;
         Some(Feature {
             tag: Tag(0),
-            lookup_indices: s.read_array(count)?,
+            lookup_indices: s.read_array16(count)?,
         })
     }
 }
@@ -634,10 +634,10 @@ impl<'a> CoverageTable<'a> {
 
         match format {
             1 => {
-                s.read_array16::<GlyphId>().unwrap().binary_search(&glyph_id).is_some()
+                s.read_count_and_array16::<GlyphId>().unwrap().binary_search(&glyph_id).is_some()
             }
             2 => {
-                let records = try_opt_or!(s.read_array16::<crate::raw::gdef::RangeRecord>(), false);
+                let records = try_opt_or!(s.read_count_and_array16::<crate::raw::gdef::RangeRecord>(), false);
                 records.into_iter().any(|r| r.range().contains(&glyph_id))
             }
             _ => false,
@@ -686,11 +686,11 @@ impl<'a> ClassDefinitionTable<'a> {
                     return None;
                 }
 
-                let classes = s.read_array16::<Class>()?;
+                let classes = s.read_count_and_array16::<Class>()?;
                 classes.get(glyph_id.0 - start_glyph_id.0)
             }
             2 => {
-                let records = s.read_array16::<crate::raw::gdef::ClassRangeRecord>()?;
+                let records = s.read_count_and_array16::<crate::raw::gdef::ClassRangeRecord>()?;
                 records.into_iter().find(|r| r.range().contains(&glyph_id))
                     .map(|record| Class(record.class()))
             }

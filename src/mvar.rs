@@ -33,7 +33,7 @@ impl<'a> Table<'a> {
         }
 
         let variation_store_offset = s.read::<Option<Offset16>>()??;
-        let records = s.read_array::<raw::ValueRecord, u16>(count)?;
+        let records = s.read_array16::<raw::ValueRecord>(count)?;
 
         Some(Table {
             data,
@@ -70,14 +70,14 @@ pub(crate) fn parse_item_variation_store(
     }
 
     let variation_region_list_offset: Offset32 = s.read()?;
-    let item_variation_data_offsets = s.read_array16::<Offset32>()?;
+    let item_variation_data_offsets = s.read_count_and_array16::<Offset32>()?;
 
     let var_data_offset = item_variation_data_offsets.get(outer_index)?;
     let mut s = orig.clone();
-    s.advance(var_data_offset.0);
+    s.advance(var_data_offset.to_usize());
 
     let mut region_s = orig.clone();
-    region_s.advance(variation_region_list_offset.0);
+    region_s.advance(variation_region_list_offset.to_usize());
 
     parse_item_variation_data(inner_index, coordinates, &mut s, region_s)
 }
@@ -95,9 +95,9 @@ fn parse_item_variation_data(
 
     let short_delta_count: u16 = s.read()?;
     let region_index_count: u16 = s.read()?;
-    let region_indexes = s.read_array::<u16, u16>(region_index_count)?;
-    s.advance(u32::from(inner_index).checked_mul(
-        u32::from(short_delta_count) + u32::from(region_index_count))?);
+    let region_indexes = s.read_array16::<u16>(region_index_count)?;
+    s.advance(usize::from(inner_index).checked_mul(
+        usize::from(short_delta_count) + usize::from(region_index_count))?);
 
     let mut delta = 0.0;
     let mut i = 0;
@@ -123,9 +123,9 @@ fn evaluate_region(
 ) -> Option<f32> {
     let axis_count: u16 = s.read()?;
     s.skip::<u16>(); // region_count
-    s.advance(u32::from(index)
-        .checked_mul(u32::from(axis_count))?
-        .checked_mul(raw::RegionAxisCoordinatesRecord::SIZE as u32)?);
+    s.advance(usize::from(index)
+        .checked_mul(usize::from(axis_count))?
+        .checked_mul(raw::RegionAxisCoordinatesRecord::SIZE)?);
 
     let mut v = 1.0;
     for i in 0..axis_count {
