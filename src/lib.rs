@@ -1260,7 +1260,7 @@ impl<'a> Font<'a> {
 
     #[inline]
     fn metrics_var_offset(&self, tag: Tag) -> f32 {
-        self.mvar.and_then(|table| mvar::metrics_offset(&table, tag, self.coords())).unwrap_or(0.0)
+        self.mvar.and_then(|table| table.metrics_offset(tag, self.coords())).unwrap_or(0.0)
     }
 
     #[inline]

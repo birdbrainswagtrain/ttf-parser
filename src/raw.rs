@@ -1069,6 +1069,10 @@ pub mod mvar {
             Self::new(data)
         }
     }
+}
+
+pub mod var_store {
+    use crate::parser::FromData;
 
     #[derive(Clone, Copy)]
     pub struct RegionAxisCoordinatesRecord {

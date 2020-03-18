@@ -479,7 +479,7 @@ MVAR_VALUE_RECORD = [
 ]
 
 # https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#variation-regions
-MVAR_REGION_AXIS_COORDINATES_RECORD = [
+VARIATION_STORE_REGION_AXIS_COORDINATES_RECORD = [
     TableRow(True,  TtfInt16(), 'startCoord'),  #
     TableRow(True,  TtfInt16(), 'peakCoord'),   # Use i16 instead of F2DOT14 to simplify calculations.
     TableRow(True,  TtfInt16(), 'endCoord'),    #
@@ -749,7 +749,12 @@ print('use crate::Tag;')
 print('use crate::parser::FromData;')
 print()
 generate_table(MVAR_VALUE_RECORD, 'ValueRecord', owned=True, impl_from_data=True)
+print('}')
 print()
-generate_table(MVAR_REGION_AXIS_COORDINATES_RECORD, 'RegionAxisCoordinatesRecord', owned=True, impl_from_data=True)
+print('pub mod var_store {')
+print('use crate::parser::FromData;')
+print()
+generate_table(VARIATION_STORE_REGION_AXIS_COORDINATES_RECORD, 'RegionAxisCoordinatesRecord',
+               owned=True, impl_from_data=True)
 print('}')
 print()

@@ -116,7 +116,7 @@ pub(crate) fn parse_metadata(data: &[u8]) -> Option<Metadata> {
     if let Some(offset) = top_dict.variation_store_offset {
         let mut s = Stream::new_at(data, offset);
         s.skip::<u16>(); // length
-        metadata.item_variation_store = ItemVariationStore::new(s)?;
+        metadata.item_variation_store = ItemVariationStore::parse(s)?;
     }
 
     // TODO: simplify
