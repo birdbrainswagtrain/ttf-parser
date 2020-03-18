@@ -51,8 +51,7 @@ impl<'a> Table<'a> {
 
         let shared_tuple_records = {
             let mut sub_s = Stream::new_at(data, shared_tuples_offset.to_usize());
-            // TODO: check overflow
-            sub_s.read_array16(shared_tuple_count * axis_count.get())?
+            sub_s.read_array16(shared_tuple_count.checked_mul(axis_count.get())?)?
         };
 
         let glyphs_variation_data = data.get(glyph_variation_data_array_offset.to_usize()..)?;

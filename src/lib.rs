@@ -1263,7 +1263,7 @@ impl<'a> Font<'a> {
     fn apply_metrics_variation_to(&self, tag: Tag, value: &mut i16) {
         if self.is_variable() {
             let v = f32::from(*value) + self.metrics_var_offset(tag);
-            // TODO: round?
+            // TODO: Should probably round it, by f32::round is not available in core.
             if let Some(v) = i16::try_num_from(v) {
                 *value = v;
             }
