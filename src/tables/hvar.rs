@@ -1,5 +1,7 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/hvar
 
+use core::convert::TryFrom;
+
 use crate::{GlyphId, NormalizedCoord};
 use crate::parser::{Stream, Offset, Offset32};
 use crate::var_store::ItemVariationStore;
@@ -63,18 +65,21 @@ impl<'a> DeltaSetIndexMap<'a> {
         }
 
         let entry_size = ((entry_format >> 4) & 3) + 1;
-        let inner_index_bit_count = ((entry_format & 0xF) + 1) as u32;
+        let inner_index_bit_count = u32::from((entry_format & 0xF) + 1);
 
         s.advance(usize::from(entry_size) * usize::from(idx));
 
         let mut n = 0u32;
         for b in s.read_bytes(usize::from(entry_size))? {
-            n = (n << 8) + *b as u32;
+            n = (n << 8) + u32::from(*b);
         }
 
         let outer_index = n >> inner_index_bit_count;
         let inner_index = n & ((1 << inner_index_bit_count) - 1);
-        Some((outer_index as u16, inner_index as u16))
+        Some((
+            u16::try_from(outer_index).ok()?,
+            u16::try_from(inner_index).ok()?
+        ))
     }
 }
 
@@ -87,9 +92,11 @@ pub(crate) fn glyph_advance_offset(
     let (outer_idx, inner_idx) = if let Some(offset) = table.advance_width_mapping_offset {
         DeltaSetIndexMap::new(table.data.get(offset.to_usize()..)?).map(glyph_id)?
     } else {
-        let outer_index = glyph_id.0 as u32 >> 16;
-        let inner_index = glyph_id.0 as u32 & 0xFFFF;
-        (outer_index as u16, inner_index as u16)
+        // 'If there is no delta-set index mapping table for advance widths,
+        // then glyph IDs implicitly provide the indices:
+        // for a given glyph ID, the delta-set outer-level index is zero,
+        // and the glyph ID is the delta-set inner-level index.'
+        (0, glyph_id.0)
     };
 
     table.variation_store.parse_delta(outer_idx, inner_idx, coordinates)

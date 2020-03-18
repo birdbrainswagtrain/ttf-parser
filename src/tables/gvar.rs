@@ -2,6 +2,7 @@
 // https://docs.microsoft.com/en-us/typography/opentype/spec/otvarcommonformats#tuple-variation-store
 
 use core::cmp;
+use core::convert::TryFrom;
 use core::num::NonZeroU16;
 
 use crate::{loca, GlyphId, OutlineBuilder, Rect, BBox, NormalizedCoord};
@@ -448,7 +449,7 @@ fn parse_variation_tuples<'a>(
         // cumulatively to the given point.
 
         let deltas_count = if let Some(point_numbers) = point_numbers.clone() {
-            point_numbers.clone().count() as u16 // TODO: we already know the len
+            u16::try_from(point_numbers.clone().count()).ok()?
         } else {
             points_len
         };
@@ -519,16 +520,16 @@ fn parse_tuple_variation_header(
     // Calculate the scalar value according to the pseudo-code described at:
     // https://docs.microsoft.com/en-us/typography/opentype/spec/otvaroverview#algorithm-for-interpolation-of-instance-values
     let mut scalar = 1.0;
-    for i in 0..coordinates.len() {
-        let v = coordinates[i].get();
-        let peak = peak_tuple.at(i as u16).0;
+    for i in 0..axis_count {
+        let v = coordinates[usize::from(i)].get();
+        let peak = peak_tuple.at(i).0;
         if peak == 0 || v == peak {
             continue;
         }
 
         if has_intermediate_region {
-            let start = start_tuple.at(i as u16).0;
-            let end = end_tuple.at(i as u16).0;
+            let start = start_tuple.at(i).0;
+            let end = end_tuple.at(i).0;
             if start > peak || peak > end || (start < 0 && end > 0 && peak != 0) {
                 continue;
             }
@@ -539,11 +540,11 @@ fn parse_tuple_variation_header(
 
             if v < peak {
                 if peak != start {
-                    scalar *= (v - start) as f32 / (peak - start) as f32;
+                    scalar *= f32::from(v - start) / f32::from(peak - start);
                 }
             } else {
                 if peak != end {
-                    scalar *= (end - v) as f32 / (end - peak) as f32;
+                    scalar *= f32::from(end - v) / f32::from(end - peak);
                 }
             }
         } else if v == 0 || v < cmp::min(0, peak) || v > cmp::max(0, peak) {
@@ -551,7 +552,7 @@ fn parse_tuple_variation_header(
             // region and its associated deltas are not applicable.'
             return Some(header);
         } else {
-            scalar *= v as f32 / peak as f32;
+            scalar *= f32::from(v) / f32::from(peak);
         }
     }
 
@@ -667,12 +668,12 @@ mod packed_points {
         type Item = u16;
 
         fn next(&mut self) -> Option<Self::Item> {
-            if self.offset >= self.data.len() as u16 {
+            if usize::from(self.offset) >= self.data.len() {
                 return None;
             }
 
             if self.state == State::Control {
-                let control = Control(self.data[self.offset as usize]);
+                let control = Control(self.data[usize::from(self.offset)]);
                 self.offset += 1;
 
                 self.points_left = control.run_count();
@@ -684,13 +685,13 @@ mod packed_points {
 
                 self.next()
             } else {
-                let mut s = Stream::new_at(self.data, self.offset as usize);
+                let mut s = Stream::new_at(self.data, usize::from(self.offset));
                 let point = if self.state == State::LongPoint {
                     self.offset += 2;
                     s.read::<u16>()?
                 } else {
                     self.offset += 1;
-                    s.read::<u8>()? as u16
+                    u16::from(s.read::<u8>()?)
                 };
 
                 self.points_left -= 1;
@@ -831,11 +832,11 @@ mod packed_deltas {
     impl RunState {
         fn next(&mut self, data: &[u8], scalar: f32) -> Option<f32> {
             if self.state == State::Control {
-                if self.data_offset == data.len() as u16 {
+                if usize::from(self.data_offset) == data.len() {
                     return None;
                 }
 
-                let control = Control(data[self.data_offset as usize]);
+                let control = Control(data[usize::from(self.data_offset)]);
                 self.data_offset += 1;
 
                 self.run_deltas_left = control.run_count();
@@ -849,15 +850,15 @@ mod packed_deltas {
 
                 self.next(data, scalar)
             } else {
-                let mut s = Stream::new_at(data, self.data_offset as usize);
+                let mut s = Stream::new_at(data, usize::from(self.data_offset));
                 let delta = if self.state == State::LongDelta {
                     self.data_offset += 2;
-                    s.read::<i16>()? as f32 * scalar
+                    f32::from(s.read::<i16>()?) * scalar
                 } else if self.state == State::ZeroDelta {
                     0.0
                 } else {
                     self.data_offset += 1;
-                    s.read::<i8>()? as f32 * scalar
+                    f32::from(s.read::<i8>()?) * scalar
                 };
 
                 self.run_deltas_left -= 1;
@@ -1102,7 +1103,7 @@ fn infer_delta(
         //
         // 'Target point delta is derived from the adjacent point deltas
         // using linear interpolation.'
-        let d = (target_point - prev_point) as f32 / (next_point - prev_point) as f32;
+        let d = f32::from(target_point - prev_point) / f32::from(next_point - prev_point);
         (1.0 - d) * prev_delta + d * next_delta
     }
 }

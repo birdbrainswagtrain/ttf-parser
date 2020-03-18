@@ -160,9 +160,9 @@ impl raw::RegionAxisCoordinatesRecord {
         }
 
         if coord < peak {
-            (coord - start) as f32 / (peak - start) as f32
+            f32::from(coord - start) / f32::from(peak - start)
         } else {
-            (end - coord) as f32 / (end - peak) as f32
+            f32::from(end - coord) / f32::from(end - peak)
         }
     }
 }

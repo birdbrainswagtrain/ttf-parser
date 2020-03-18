@@ -911,11 +911,8 @@ fn _parse_char_string(
                 stack.clear();
             }
             operator::SHORT_INT => {
-                let b1 = s.read::<u8>().ok_or(CFFError::ReadOutOfBounds)? as i32;
-                let b2 = s.read::<u8>().ok_or(CFFError::ReadOutOfBounds)? as i32;
-                let n = ((b1 << 24) | (b2 << 16)) >> 16;
-                debug_assert!((-32768..=32767).contains(&n));
-                stack.push(n as f32)?;
+                let n = s.read::<i16>().ok_or(CFFError::ReadOutOfBounds)?;
+                stack.push(f32::from(n))?;
             }
             operator::CALL_GLOBAL_SUBROUTINE => {
                 if stack.is_empty() {
@@ -1059,7 +1056,7 @@ fn _parse_char_string(
 }
 
 #[inline]
-fn conv_subroutine_index(index: f32, bias: u16) -> Result<u16, CFFError> {
+pub fn conv_subroutine_index(index: f32, bias: u16) -> Result<u16, CFFError> {
     let mut index = i32::try_num_from(index).ok_or(CFFError::InvalidSubroutineIndex)?;
     index += i32::from(bias);
     u16::try_from(index).map_err(|_| CFFError::InvalidSubroutineIndex)

@@ -350,21 +350,11 @@ impl BBox {
 
     #[inline]
     fn to_rect(&self) -> Option<Rect> {
-        #[inline]
-        fn try_f32_to_i16(n: f32) -> Option<i16> {
-            // There is no i16::try_from(f32) so we have to write one ourselves.
-            if n >= core::i16::MIN as f32 && n <= core::i16::MAX as f32 {
-                Some(n as i16)
-            } else {
-                None
-            }
-        }
-
         Some(Rect {
-            x_min: try_f32_to_i16(self.x_min)?,
-            y_min: try_f32_to_i16(self.y_min)?,
-            x_max: try_f32_to_i16(self.x_max)?,
-            y_max: try_f32_to_i16(self.y_max)?,
+            x_min: i16::try_num_from(self.x_min)?,
+            y_min: i16::try_num_from(self.y_min)?,
+            x_max: i16::try_num_from(self.x_max)?,
+            y_max: i16::try_num_from(self.y_max)?,
         })
     }
 }

@@ -5,12 +5,12 @@ use core::convert::TryFrom;
 use core::ops::Range;
 
 use crate::{GlyphId, OutlineBuilder, Rect, BBox, NormalizedCoord};
-use crate::parser::{Stream, NumConv, TryNumConv};
+use crate::parser::{Stream, Fixed, NumConv, TryNumConv};
 use crate::var_store::*;
 use crate::cff::{
     Builder, DataIndex, IsEven, Operator, ArgumentsStack, CFFError,
     calc_subroutine_bias, f32_abs, parse_number, skip_number, parse_index_impl,
-    is_dict_one_byte_op
+    is_dict_one_byte_op, conv_subroutine_index
 };
 
 // https://docs.microsoft.com/en-us/typography/opentype/spec/cff2#7-top-dict-data
@@ -536,9 +536,8 @@ fn _parse_char_string(
                     return Err(CFFError::NestingLimitReached);
                 }
 
-                let subroutine_bias = calc_subroutine_bias(ctx.metadata.local_subrs.len() as u16);
-                let index = stack.pop() as i32 + i32::from(subroutine_bias);
-                let index = u16::try_from(index).map_err(|_| CFFError::InvalidSubroutineIndex)?;
+                let subroutine_bias = calc_subroutine_bias(ctx.metadata.local_subrs.len());
+                let index = conv_subroutine_index(stack.pop(), subroutine_bias)?;
                 let char_string = ctx.metadata.local_subrs.get(index)
                     .ok_or(CFFError::InvalidSubroutineIndex)?;
                 let pos = _parse_char_string(ctx, char_string, x, y, stack, depth + 1, builder)?;
@@ -897,11 +896,8 @@ fn _parse_char_string(
                 stack.clear();
             }
             operator::SHORT_INT => {
-                let b1 = s.read::<u8>().ok_or(CFFError::ReadOutOfBounds)? as i32;
-                let b2 = s.read::<u8>().ok_or(CFFError::ReadOutOfBounds)? as i32;
-                let n = ((b1 << 24) | (b2 << 16)) >> 16;
-                debug_assert!((-32768..=32767).contains(&n));
-                stack.push(n as f32)?;
+                let n = s.read::<i16>().ok_or(CFFError::ReadOutOfBounds)?;
+                stack.push(f32::from(n))?;
             }
             operator::CALL_GLOBAL_SUBROUTINE => {
                 if stack.is_empty() {
@@ -913,8 +909,7 @@ fn _parse_char_string(
                 }
 
                 let subroutine_bias = calc_subroutine_bias(ctx.metadata.global_subrs.len());
-                let index = stack.pop() as i32 + i32::from(subroutine_bias);
-                let index = u16::try_from(index).map_err(|_| CFFError::InvalidSubroutineIndex)?;
+                let index = conv_subroutine_index(stack.pop(), subroutine_bias)?;
                 let char_string = ctx.metadata.global_subrs.get(index)
                     .ok_or(CFFError::InvalidSubroutineIndex)?;
                 let pos = _parse_char_string(ctx, char_string, x, y, stack, depth + 1, builder)?;
@@ -1010,29 +1005,27 @@ fn _parse_char_string(
                 debug_assert!(stack.is_empty());
             }
             32..=246 => {
-                let n = i32::from(op) - 139;
-                stack.push(n as f32)?;
+                let n = i16::from(op) - 139;
+                stack.push(f32::from(n))?;
             }
             247..=250 => {
-                let b1 = s.read::<u8>().ok_or(CFFError::ReadOutOfBounds)? as i32;
-                let n = (i32::from(op) - 247) * 256 + b1 + 108;
+                let b1: u8 = s.read().ok_or(CFFError::ReadOutOfBounds)?;
+                let n = (i16::from(op) - 247) * 256 + i16::from(b1) + 108;
                 debug_assert!((108..=1131).contains(&n));
-                stack.push(n as f32)?;
+                stack.push(f32::from(n))?;
             }
             251..=254 => {
-                let b1 = s.read::<u8>().ok_or(CFFError::ReadOutOfBounds)? as i32;
-                let n = -(i32::from(op) - 251) * 256 - b1 - 108;
+                let b1: u8 = s.read().ok_or(CFFError::ReadOutOfBounds)?;
+                let n = -(i16::from(op) - 251) * 256 - i16::from(b1) - 108;
                 debug_assert!((-1131..=-108).contains(&n));
-                stack.push(n as f32)?;
+                stack.push(f32::from(n))?;
             }
             operator::FIXED_16_16 => {
-                let n = (s.read::<u32>().ok_or(CFFError::ReadOutOfBounds)? / 65536) as i32 as f32;
-                stack.push(n)?;
+                let n = s.read::<Fixed>().ok_or(CFFError::ReadOutOfBounds)?;
+                stack.push(n.0)?;
             }
         }
     }
-
-    // TODO: 'A charstring subroutine must end with either an endchar or a return operator.'
 
     Ok((x, y))
 }

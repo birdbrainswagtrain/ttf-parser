@@ -23,7 +23,7 @@ impl<'a> Table<'a> {
         s.skip::<u16>(); // reserved
         let value_record_size: u16 = s.read()?;
 
-        if value_record_size as usize != raw::ValueRecord::SIZE {
+        if usize::from(value_record_size) != raw::ValueRecord::SIZE {
             return None;
         }
 

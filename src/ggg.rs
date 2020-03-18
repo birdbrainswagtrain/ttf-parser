@@ -98,10 +98,10 @@ pub trait GlyphPosSubTable {
     /// Just a shorthand for:
     ///
     /// ```ignore
-    /// table.scripts().nth(index.0 as usize)
+    /// table.scripts().nth(usize::from(index.0))
     /// ```
     fn script_at(&self, index: ScriptIndex) -> Option<Script> {
-        self.scripts().nth(index.0 as usize)
+        self.scripts().nth(usize::from(index.0))
     }
 
     /// Returns an iterator over GSUB/GPOS table features.
@@ -112,10 +112,10 @@ pub trait GlyphPosSubTable {
     /// Just a shorthand for:
     ///
     /// ```ignore
-    /// table.features().nth(index.0 as usize)
+    /// table.features().nth(usize::from(index.0))
     /// ```
     fn feature_at(&self, index: FeatureIndex) -> Option<Feature> {
-        self.features().nth(index.0 as usize)
+        self.features().nth(usize::from(index.0))
     }
 
     /// Returns an iterator over GSUB/GPOS table lookups.
@@ -126,10 +126,10 @@ pub trait GlyphPosSubTable {
     /// Just a shorthand for:
     ///
     /// ```ignore
-    /// table.lookups().nth(index.0 as usize)
+    /// table.lookups().nth(usize::from(index.0))
     /// ```
     fn lookup_at(&self, index: LookupIndex) -> Option<Lookup> {
-        self.lookups().nth(index.0 as usize)
+        self.lookups().nth(usize::from(index.0))
     }
 
     /// Returns an iterator over GSUB/GPOS table feature variations.
@@ -142,10 +142,10 @@ pub trait GlyphPosSubTable {
     /// Just a shorthand for:
     ///
     /// ```ignore
-    /// table.feature_variations().nth(index.0 as usize)
+    /// table.feature_variations().nth(usize::from(index.0))
     /// ```
     fn feature_variation_at(&self, index: FeatureVariationIndex) -> Option<FeatureVariation> {
-        self.feature_variations().nth(index.0 as usize)
+        self.feature_variations().nth(usize::num_from(index.0))
     }
 }
 
@@ -203,7 +203,7 @@ impl<'a> Iterator for Scripts<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.index = self.index.checked_add(1)?;
-        self.nth(self.index as usize - 1)
+        self.nth(usize::from(self.index) - 1)
     }
 
     fn count(self) -> usize {
@@ -264,10 +264,10 @@ impl<'a> Script<'a> {
     /// Just a shorthand for:
     ///
     /// ```ignore
-    /// script.languages().nth(index.0 as usize)
+    /// script.languages().nth(usize::from(index.0))
     /// ```
     pub fn language_at(&self, index: LanguageIndex) -> Option<Language> {
-        self.languages().nth(index.0 as usize)
+        self.languages().nth(usize::from(index.0))
     }
 
     /// Returns a `Language` by `tag`.
@@ -295,7 +295,7 @@ impl<'a> Iterator for Languages<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.index = self.index.checked_add(1)?;
-        self.nth(self.index as usize - 1)
+        self.nth(usize::num_from(self.index) - 1)
     }
 
     fn count(self) -> usize {
@@ -352,7 +352,7 @@ impl<'a> Iterator for Features<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.index = self.index.checked_add(1)?;
-        self.nth(self.index as usize - 1)
+        self.nth(usize::from(self.index) - 1)
     }
 
     fn count(self) -> usize {
@@ -397,7 +397,7 @@ impl<'a> Iterator for Lookups<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.index = self.index.checked_add(1)?;
-        self.nth(self.index as usize - 1)
+        self.nth(usize::from(self.index) - 1)
     }
 
     fn count(self) -> usize {
@@ -447,7 +447,7 @@ impl<'a> Iterator for FeatureVariations<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.index = self.index.checked_add(1)?;
-        self.nth(self.index as usize - 1)
+        self.nth(usize::num_from(self.index) - 1)
     }
 
     fn count(self) -> usize {
@@ -526,7 +526,7 @@ impl<'a> Iterator for ConditionSet<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.index = self.index.checked_add(1)?;
-        self.nth(self.index as usize - 1)
+        self.nth(usize::from(self.index) - 1)
     }
 
     fn count(self) -> usize {
@@ -547,7 +547,7 @@ impl<'a> Iterator for ConditionSet<'a> {
 
 impl Condition {
     fn evaluate(&self, coordinates: &[NormalizedCoord]) -> bool {
-        let coord = coordinates.get(self.axis_index() as usize).cloned().unwrap_or_default();
+        let coord = coordinates.get(usize::from(self.axis_index())).cloned().unwrap_or_default();
         self.filter_range_min_value() <= coord.get() && coord.get() <= self.filter_range_max_value()
     }
 }
@@ -566,7 +566,7 @@ impl<'a> Iterator for FeatureSubstitutions<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.index = self.index.checked_add(1)?;
-        self.nth(self.index as usize - 1)
+        self.nth(usize::from(self.index) - 1)
     }
 
     fn count(self) -> usize {
