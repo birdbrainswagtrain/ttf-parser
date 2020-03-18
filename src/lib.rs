@@ -73,34 +73,16 @@ macro_rules! warn {
     ($($arg:tt)+) => () // do nothing
 }
 
-mod avar;
-mod cff2;
-mod cff;
-mod cmap;
-mod fvar;
-mod gdef;
 mod ggg;
-mod glyf;
-mod gpos;
-mod gsub;
-mod gvar;
-mod hmtx;
-mod hvar;
-mod kern;
-mod loca;
-mod maxp;
-mod mvar;
-mod name;
-mod os2;
 mod parser;
-mod post;
 mod raw;
-mod vorg;
+mod tables;
 mod var_store;
 
 #[cfg(feature = "std")]
 mod writer;
 
+use tables::*;
 use parser::{Stream, SafeStream, Offset, NumConv, TryNumConv, i16_bound, f32_bound};
 pub use fvar::{VariationAxes, VariationAxis};
 pub use gdef::GlyphClass;
