@@ -286,6 +286,7 @@ impl FromData for Tag {
 }
 
 
+
 /// A line metrics.
 ///
 /// Used for underline and strikeout.

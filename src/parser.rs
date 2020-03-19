@@ -763,6 +763,7 @@ impl<'a, T: Offset + FromData> Iterator for OffsetsIter16<'a, T> {
     }
 }
 
+
 #[inline]
 pub fn i16_bound(min: i16, val: i16, max: i16) -> i16 {
     use core::cmp;
