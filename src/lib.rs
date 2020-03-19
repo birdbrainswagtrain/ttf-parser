@@ -1053,7 +1053,7 @@ impl<'a> Font<'a> {
             bearing += hvar::glyph_side_bearing_offset(self.hvar?, glyph_id, self.coords())? + 0.5;
         }
 
-        i16::try_num_from(bearin)
+        i16::try_num_from(bearing)
     }
 
     /// Returns glyph's vertical side bearing.
