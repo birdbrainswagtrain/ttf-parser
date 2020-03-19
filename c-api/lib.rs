@@ -251,14 +251,6 @@ pub extern "C" fn ttfp_is_oblique(font: *const ttfp_font) -> bool {
     font_from_ptr(font).is_oblique()
 }
 
-/// @brief Checks that font is vertical.
-///
-/// Simply checks the presence of a `vhea` table.
-#[no_mangle]
-pub extern "C" fn ttfp_is_vertical(font: *const ttfp_font) -> bool {
-    font_from_ptr(font).is_vertical()
-}
-
 /// @brief Checks that font is variable.
 ///
 /// Simply checks the presence of a `fvar` table.
@@ -284,7 +276,7 @@ pub extern "C" fn ttfp_get_width(font: *const ttfp_font) -> u16 {
     font_from_ptr(font).width().to_number()
 }
 
-/// @brief Returns font's ascender value.
+/// @brief Returns a horizontal font ascender.
 ///
 /// This function is affected by variation axes.
 #[no_mangle]
@@ -292,7 +284,7 @@ pub extern "C" fn ttfp_get_ascender(font: *const ttfp_font) -> i16 {
     font_from_ptr(font).ascender()
 }
 
-/// @brief Returns font's descender value.
+/// @brief Returns a horizontal font descender.
 ///
 /// This function is affected by variation axes.
 #[no_mangle]
@@ -300,7 +292,7 @@ pub extern "C" fn ttfp_get_descender(font: *const ttfp_font) -> i16 {
     font_from_ptr(font).descender()
 }
 
-/// @brief Returns font's height.
+/// @brief Returns a horizontal font height.
 ///
 /// This function is affected by variation axes.
 #[no_mangle]
@@ -308,12 +300,52 @@ pub extern "C" fn ttfp_get_height(font: *const ttfp_font) -> i16 {
     font_from_ptr(font).height()
 }
 
-/// @brief Returns font's line gap.
+/// @brief Returns a horizontal font line gap.
 ///
 /// This function is affected by variation axes.
 #[no_mangle]
 pub extern "C" fn ttfp_get_line_gap(font: *const ttfp_font) -> i16 {
     font_from_ptr(font).line_gap()
+}
+
+/// @brief Returns a vertical font ascender.
+///
+/// This function is affected by variation axes.
+///
+/// @return `0` when `vhea` table is not present.
+#[no_mangle]
+pub extern "C" fn ttfp_get_vertical_ascender(font: *const ttfp_font) -> i16 {
+    font_from_ptr(font).vertical_ascender().unwrap_or(0)
+}
+
+/// @brief Returns a vertical font descender.
+///
+/// This function is affected by variation axes.
+///
+/// @return `0` when `vhea` table is not present.
+#[no_mangle]
+pub extern "C" fn ttfp_get_vertical_descender(font: *const ttfp_font) -> i16 {
+    font_from_ptr(font).vertical_descender().unwrap_or(0)
+}
+
+/// @brief Returns a vertical font height.
+///
+/// This function is affected by variation axes.
+///
+/// @return `0` when `vhea` table is not present.
+#[no_mangle]
+pub extern "C" fn ttfp_get_vertical_height(font: *const ttfp_font) -> i16 {
+    font_from_ptr(font).vertical_height().unwrap_or(0)
+}
+
+/// @brief Returns a vertical font line gap.
+///
+/// This function is affected by variation axes.
+///
+/// @return `0` when `vhea` table is not present.
+#[no_mangle]
+pub extern "C" fn ttfp_get_vertical_line_gap(font: *const ttfp_font) -> i16 {
+    font_from_ptr(font).vertical_line_gap().unwrap_or(0)
 }
 
 /// @brief Returns font's units per EM.
@@ -460,31 +492,43 @@ pub extern "C" fn ttfp_get_glyph_var_index(
     }).unwrap_or(0)
 }
 
-/// @brief Returns glyph's advance.
+/// @brief Returns glyph's horizontal advance.
 ///
-/// Supports both horizontal and vertical fonts.
+/// @return Glyph's advance or 0 when not set.
+#[no_mangle]
+pub extern "C" fn ttfp_get_glyph_hor_advance(font: *const ttfp_font, glyph_id: GlyphId) -> u16 {
+    font_from_ptr(font).glyph_hor_advance(glyph_id).unwrap_or(0)
+}
+
+/// @brief Returns glyph's vertical advance.
 ///
 /// This function is affected by variation axes.
 ///
 /// @return Glyph's advance or 0 when not set.
 #[no_mangle]
-pub extern "C" fn ttfp_get_glyph_advance(font: *const ttfp_font, glyph_id: GlyphId) -> u16 {
-    font_from_ptr(font).glyph_advance(glyph_id).unwrap_or(0)
+pub extern "C" fn ttfp_get_glyph_ver_advance(font: *const ttfp_font, glyph_id: GlyphId) -> u16 {
+    font_from_ptr(font).glyph_ver_advance(glyph_id).unwrap_or(0)
 }
 
-/// @brief Returns glyph's side bearing.
+/// @brief Returns glyph's horizontal side bearing.
 ///
-/// Supports both horizontal and vertical fonts.
+/// @return Glyph's side bearing or 0 when not set.
+#[no_mangle]
+pub extern "C" fn ttfp_get_glyph_hor_side_bearing(font: *const ttfp_font, glyph_id: GlyphId) -> i16 {
+    font_from_ptr(font).glyph_hor_side_bearing(glyph_id).unwrap_or(0)
+}
+
+/// @brief Returns glyph's vertical side bearing.
 ///
 /// This function is affected by variation axes.
 ///
 /// @return Glyph's side bearing or 0 when not set.
 #[no_mangle]
-pub extern "C" fn ttfp_get_glyph_side_bearing(font: *const ttfp_font, glyph_id: GlyphId) -> i16 {
-    font_from_ptr(font).glyph_side_bearing(glyph_id).unwrap_or(0)
+pub extern "C" fn ttfp_get_glyph_ver_side_bearing(font: *const ttfp_font, glyph_id: GlyphId) -> i16 {
+    font_from_ptr(font).glyph_ver_side_bearing(glyph_id).unwrap_or(0)
 }
 
-/// @brief Returns a vertical origin of a glyph.
+/// @brief Returns glyph's vertical origin.
 ///
 /// @return Glyph's vertical origin or 0 when not set.
 #[no_mangle]

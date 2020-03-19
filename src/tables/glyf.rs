@@ -182,12 +182,12 @@ impl Transform {
     #[inline]
     fn is_default(&self) -> bool {
         // A direct float comparison is fine in our case.
-        self.a == 1.0
-            && self.b == 0.0
-            && self.c == 0.0
-            && self.d == 1.0
-            && self.e == 0.0
-            && self.f == 0.0
+           self.a == 1.0
+        && self.b == 0.0
+        && self.c == 0.0
+        && self.d == 1.0
+        && self.e == 0.0
+        && self.f == 0.0
     }
 }
 

@@ -793,14 +793,6 @@ impl<'a> Font<'a> {
         try_opt_or!(self.os_2, false).is_oblique()
     }
 
-    /// Checks that font is vertical.
-    ///
-    /// Simply checks the presence of a `vhea` table.
-    #[inline]
-    pub fn is_vertical(&self) -> bool {
-        self.vhea.is_some()
-    }
-
     /// Checks that font is variable.
     ///
     /// Simply checks the presence of a `fvar` table.
@@ -831,37 +823,29 @@ impl<'a> Font<'a> {
         self.os_2.filter(|table| table.is_use_typo_metrics())
     }
 
-    /// Returns font's ascender value.
+    /// Returns a horizontal font ascender.
     ///
     /// This method is affected by variation axes.
     #[inline]
     pub fn ascender(&self) -> i16 {
-        if let Some(vhea) = self.vhea {
-            self.apply_metrics_variation(Tag::from_bytes(b"vasc"), vhea.ascender())
+        if let Some(os_2) = self.use_typo_metrics() {
+            let v = os_2.s_typo_ascender();
+            self.apply_metrics_variation(Tag::from_bytes(b"hasc"), v)
         } else {
-            if let Some(os_2) = self.use_typo_metrics() {
-                let v = os_2.s_typo_ascender();
-                self.apply_metrics_variation(Tag::from_bytes(b"hasc"), v)
-            } else {
-                self.hhea.ascender()
-            }
+            self.hhea.ascender()
         }
     }
 
-    /// Returns font's descender value.
+    /// Returns a horizontal font descender.
     ///
     /// This method is affected by variation axes.
     #[inline]
     pub fn descender(&self) -> i16 {
-        if let Some(vhea) = self.vhea {
-            self.apply_metrics_variation(Tag::from_bytes(b"vdsc"), vhea.descender())
+        if let Some(os_2) = self.use_typo_metrics() {
+            let v = os_2.s_typo_descender();
+            self.apply_metrics_variation(Tag::from_bytes(b"hdsc"), v)
         } else {
-            if let Some(os_2) = self.use_typo_metrics() {
-                let v = os_2.s_typo_descender();
-                self.apply_metrics_variation(Tag::from_bytes(b"hdsc"), v)
-            } else {
-                self.hhea.descender()
-            }
+            self.hhea.descender()
         }
     }
 
@@ -873,21 +857,54 @@ impl<'a> Font<'a> {
         self.ascender() - self.descender()
     }
 
-    /// Returns font's line gap.
+    /// Returns a horizontal font line gap.
     ///
     /// This method is affected by variation axes.
     #[inline]
     pub fn line_gap(&self) -> i16 {
-        if let Some(vhea) = self.vhea {
-            self.apply_metrics_variation(Tag::from_bytes(b"vlgp"), vhea.line_gap())
+        if let Some(os_2) = self.use_typo_metrics() {
+            let v = os_2.s_typo_line_gap();
+            self.apply_metrics_variation(Tag::from_bytes(b"hlgp"), v)
         } else {
-            if let Some(os_2) = self.use_typo_metrics() {
-                let v = os_2.s_typo_line_gap();
-                self.apply_metrics_variation(Tag::from_bytes(b"hlgp"), v)
-            } else {
-                self.hhea.line_gap()
-            }
+            self.hhea.line_gap()
         }
+    }
+
+    // TODO: does this affected by USE_TYPO_METRICS?
+
+    /// Returns a vertical font ascender.
+    ///
+    /// This method is affected by variation axes.
+    #[inline]
+    pub fn vertical_ascender(&self) -> Option<i16> {
+        self.vhea.map(|vhea| vhea.ascender())
+            .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"vasc"), v))
+    }
+
+    /// Returns a vertical font descender.
+    ///
+    /// This method is affected by variation axes.
+    #[inline]
+    pub fn vertical_descender(&self) -> Option<i16> {
+        self.vhea.map(|vhea| vhea.descender())
+            .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"vdsc"), v))
+    }
+
+    /// Returns a vertical font height.
+    ///
+    /// This method is affected by variation axes.
+    #[inline]
+    pub fn vertical_height(&self) -> Option<i16> {
+        Some(self.vertical_ascender()? - self.vertical_descender()?)
+    }
+
+    /// Returns a vertical font line gap.
+    ///
+    /// This method is affected by variation axes.
+    #[inline]
+    pub fn vertical_line_gap(&self) -> Option<i16> {
+        self.vhea.map(|vhea| vhea.line_gap())
+            .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"vlgp"), v))
     }
 
     /// Returns font's units per EM.
@@ -1010,52 +1027,66 @@ impl<'a> Font<'a> {
         cmap::glyph_variation_index(self.cmap.as_ref()?, c, variation)
     }
 
-    /// Returns glyph's advance.
-    ///
-    /// Supports both horizontal and vertical fonts.
+    /// Returns glyph's horizontal advance.
     ///
     /// This method is affected by variation axes.
     #[inline]
-    pub fn glyph_advance(&self, glyph_id: GlyphId) -> Option<u16> {
-        let mut advance = if self.is_vertical() {
-            self.vmtx.and_then(|vmtx| vmtx.advance(glyph_id))
-        } else {
-            self.hmtx.and_then(|hmtx| hmtx.advance(glyph_id))
-        }? as f32;
+    pub fn glyph_hor_advance(&self, glyph_id: GlyphId) -> Option<u16> {
+        let mut advance = self.hmtx?.advance(glyph_id)? as f32;
 
         if self.is_variable() {
-            let data = if self.is_vertical() { self.vvar } else { self.hvar };
-            advance += hvar::glyph_advance_offset(data?, glyph_id, self.coords())?;
+            advance += hvar::glyph_advance_offset(self.hvar?, glyph_id, self.coords())?;
         }
 
         u16::try_num_from(advance)
     }
 
-    /// Returns glyph's side bearing.
-    ///
-    /// Supports both horizontal and vertical fonts.
+    /// Returns glyph's vertical advance.
     ///
     /// This method is affected by variation axes.
     #[inline]
-    pub fn glyph_side_bearing(&self, glyph_id: GlyphId) -> Option<i16> {
-        let mut bearing = if self.is_vertical() {
-            self.vmtx.and_then(|vmtx| vmtx.side_bearing(glyph_id))
-        } else {
-            self.hmtx.and_then(|hmtx| hmtx.side_bearing(glyph_id))
-        }? as f32;
+    pub fn glyph_ver_advance(&self, glyph_id: GlyphId) -> Option<u16> {
+        let mut advance = self.vmtx?.advance(glyph_id)? as f32;
 
         if self.is_variable() {
-            let data = if self.is_vertical() { self.vvar } else { self.hvar };
-            bearing += hvar::glyph_side_bearing_offset(data?, glyph_id, self.coords())?;
+            advance += hvar::glyph_advance_offset(self.vvar?, glyph_id, self.coords())?;
+        }
+
+        u16::try_num_from(advance)
+    }
+
+    /// Returns glyph's horizontal side bearing.
+    ///
+    /// This method is affected by variation axes.
+    #[inline]
+    pub fn glyph_hor_side_bearing(&self, glyph_id: GlyphId) -> Option<i16> {
+        let mut bearing = self.hmtx?.side_bearing(glyph_id)? as f32;
+
+        if self.is_variable() {
+            bearing += hvar::glyph_side_bearing_offset(self.hvar?, glyph_id, self.coords())?;
         }
 
         i16::try_num_from(bearing)
     }
 
-    /// Returns a vertical origin of a glyph according to
+    /// Returns glyph's vertical side bearing.
+    ///
+    /// This method is affected by variation axes.
+    #[inline]
+    pub fn glyph_ver_side_bearing(&self, glyph_id: GlyphId) -> Option<i16> {
+        let mut bearing = self.vmtx?.side_bearing(glyph_id)? as f32;
+
+        if self.is_variable() {
+            bearing += hvar::glyph_side_bearing_offset(self.vvar?, glyph_id, self.coords())?;
+        }
+
+        i16::try_num_from(bearing)
+    }
+
+    /// Returns glyph's vertical origin according to
     /// [Vertical Origin Table](https://docs.microsoft.com/en-us/typography/opentype/spec/vorg).
     pub fn glyph_y_origin(&self, glyph_id: GlyphId) -> Option<i16> {
-        self.vorg.and_then(|vorg| vorg.glyph_y_origin(glyph_id))
+        self.vorg.map(|vorg| vorg.glyph_y_origin(glyph_id))
     }
 
     /// Returns glyph's name.
@@ -1167,12 +1198,12 @@ impl<'a> Font<'a> {
     ///     }
     /// }
     ///
-    /// let data = std::fs::read("tests/fonts/glyphs.ttf").unwrap();
+    /// let data = std::fs::read("fonts/SourceSansPro-Regular-Tiny.ttf").unwrap();
     /// let font = ttf_parser::Font::from_data(&data, 0).unwrap();
     /// let mut builder = Builder(String::new());
-    /// let bbox = font.outline_glyph(ttf_parser::GlyphId(0), &mut builder).unwrap();
-    /// assert_eq!(builder.0, "M 50 0 L 50 750 L 450 750 L 450 0 L 50 0 Z ");
-    /// assert_eq!(bbox, ttf_parser::Rect { x_min: 50, y_min: 0, x_max: 450, y_max: 750 });
+    /// let bbox = font.outline_glyph(ttf_parser::GlyphId(13), &mut builder).unwrap();
+    /// assert_eq!(builder.0, "M 90 0 L 90 656 L 173 656 L 173 71 L 460 71 L 460 0 L 90 0 Z ");
+    /// assert_eq!(bbox, ttf_parser::Rect { x_min: 90, y_min: 0, x_max: 460, y_max: 656 });
     /// ```
     #[inline]
     pub fn outline_glyph(

@@ -241,13 +241,6 @@ bool ttfp_is_bold(const ttfp_font *font);
 bool ttfp_is_oblique(const ttfp_font *font);
 
 /**
- * @brief Checks that font is vertical.
- *
- * Simply checks the presence of a `vhea` table.
- */
-bool ttfp_is_vertical(const ttfp_font *font);
-
-/**
  * @brief Checks that font is variable.
  *
  * Simply checks the presence of a `fvar` table.
@@ -270,32 +263,68 @@ uint16_t ttfp_get_weight(const ttfp_font *font);
 uint16_t ttfp_get_width(const ttfp_font *font);
 
 /**
- * @brief Returns font's ascender value.
+ * @brief Returns a horizontal font ascender.
  *
  * This function is affected by variation axes.
  */
 int16_t ttfp_get_ascender(const ttfp_font *font);
 
 /**
- * @brief Returns font's descender value.
+ * @brief Returns a horizontal font descender.
  *
  * This function is affected by variation axes.
  */
 int16_t ttfp_get_descender(const ttfp_font *font);
 
 /**
- * @brief Returns font's height.
+ * @brief Returns a horizontal font height.
  *
  * This function is affected by variation axes.
  */
 int16_t ttfp_get_height(const ttfp_font *font);
 
 /**
- * @brief Returns font's line gap.
+ * @brief Returns a horizontal font line gap.
  *
  * This function is affected by variation axes.
  */
 int16_t ttfp_get_line_gap(const ttfp_font *font);
+
+/**
+ * @brief Returns a vertical font ascender.
+ *
+ * This function is affected by variation axes.
+ *
+ * @return `0` when `vhea` table is not present.
+ */
+int16_t ttfp_get_vertical_ascender(const ttfp_font *font);
+
+/**
+ * @brief Returns a vertical font descender.
+ *
+ * This function is affected by variation axes.
+ *
+ * @return `0` when `vhea` table is not present.
+ */
+int16_t ttfp_get_vertical_descender(const ttfp_font *font);
+
+/**
+ * @brief Returns a vertical font height.
+ *
+ * This function is affected by variation axes.
+ *
+ * @return `0` when `vhea` table is not present.
+ */
+int16_t ttfp_get_vertical_height(const ttfp_font *font);
+
+/**
+ * @brief Returns a vertical font line gap.
+ *
+ * This function is affected by variation axes.
+ *
+ * @return `0` when `vhea` table is not present.
+ */
+int16_t ttfp_get_vertical_line_gap(const ttfp_font *font);
 
 /**
  * @brief Returns font's units per EM.
@@ -376,29 +405,39 @@ uint16_t ttfp_get_glyph_index(const ttfp_font *font, uint32_t codepoint);
 uint16_t ttfp_get_glyph_var_index(const ttfp_font *font, uint32_t codepoint, uint32_t variation);
 
 /**
- * @brief Returns glyph's advance.
+ * @brief Returns glyph's horizontal advance.
  *
- * Supports both horizontal and vertical fonts.
+ * @return Glyph's advance or 0 when not set.
+ */
+uint16_t ttfp_get_glyph_hor_advance(const ttfp_font *font, uint16_t glyph_id);
+
+/**
+ * @brief Returns glyph's vertical advance.
  *
  * This function is affected by variation axes.
  *
  * @return Glyph's advance or 0 when not set.
  */
-uint16_t ttfp_get_glyph_advance(const ttfp_font *font, uint16_t glyph_id);
+uint16_t ttfp_get_glyph_ver_advance(const ttfp_font *font, uint16_t glyph_id);
 
 /**
- * @brief Returns glyph's side bearing.
+ * @brief Returns glyph's horizontal side bearing.
  *
- * Supports both horizontal and vertical fonts.
+ * @return Glyph's side bearing or 0 when not set.
+ */
+int16_t ttfp_get_glyph_hor_side_bearing(const ttfp_font *font, uint16_t glyph_id);
+
+/**
+ * @brief Returns glyph's vertical side bearing.
  *
  * This function is affected by variation axes.
  *
  * @return Glyph's side bearing or 0 when not set.
  */
-int16_t ttfp_get_glyph_side_bearing(const ttfp_font *font, uint16_t glyph_id);
+int16_t ttfp_get_glyph_ver_side_bearing(const ttfp_font *font, uint16_t glyph_id);
 
 /**
- * @brief Returns a vertical origin of a glyph.
+ * @brief Returns glyph's vertical origin.
  *
  * @return Glyph's vertical origin or 0 when not set.
  */
