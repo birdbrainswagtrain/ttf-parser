@@ -410,7 +410,8 @@ impl<'a> Iterator for Lookups<'a> {
         let mut s = Stream::new(data);
         let lookup_type: u16 = s.read()?;
         let lookup_flag: u16 = s.read()?;
-        let offsets = s.read_offsets16(data)?;
+        let count: u16 = s.read()?;
+        let offsets = s.read_offsets16(count, data)?;
         let mark_filtering_set: u16 = s.read()?;
         Some(Lookup {
             lookup_type,
@@ -477,7 +478,7 @@ impl<'a> FeatureVariation<'a> {
     /// Evaluates variation using specified `coordinates`.
     ///
     /// Number of `coordinates` should be the same as number of variation axes in the font.
-    pub(crate) fn evaluate(&self, coordinates: &[NormalizedCoord]) -> bool {
+    pub fn evaluate(&self, coordinates: &[NormalizedCoord]) -> bool {
         for condition in try_opt_or!(self.condition_set(), false) {
             if !condition.evaluate(coordinates) {
                 return false;
@@ -648,7 +649,8 @@ impl<'a> CoverageTable<'a> {
         match format {
             1 => {
                 let count = try_opt_or!(s.read::<u16>(), false);
-                s.read_array16::<GlyphId>(count).unwrap().binary_search(&glyph_id).is_some()
+                let records = try_opt_or!(s.read_array16::<GlyphId>(count), false);
+                records.binary_search(&glyph_id).is_some()
             }
             2 => {
                 let count = try_opt_or!(s.read::<u16>(), false);

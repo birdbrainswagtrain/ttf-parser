@@ -115,7 +115,7 @@ impl FromData for GlyphId {
 ///
 /// The number is stored as f2.16
 #[derive(Clone, Copy, PartialEq, Default, Debug)]
-struct NormalizedCoord(i16);
+pub struct NormalizedCoord(i16);
 
 impl From<i16> for NormalizedCoord {
     /// Creates a new coordinate.
@@ -140,7 +140,7 @@ impl From<f32> for NormalizedCoord {
 impl NormalizedCoord {
     /// Returns the coordinate value as f2.14.
     #[inline]
-    fn get(self) -> i16 {
+    pub fn get(self) -> i16 {
         self.0
     }
 }
@@ -310,6 +310,20 @@ pub struct Rect {
     pub y_min: i16,
     pub x_max: i16,
     pub y_max: i16,
+}
+
+impl Rect {
+    /// Returns rect's width.
+    #[inline]
+    pub fn width(&self) -> i16 {
+        self.x_max - self.x_min
+    }
+
+    /// Returns rect's height.
+    #[inline]
+    pub fn height(&self) -> i16 {
+        self.y_max - self.y_min
+    }
 }
 
 
@@ -649,7 +663,13 @@ impl<'a> Font<'a> {
         }
 
         if let Some(data) = loca {
-            if let Some(format) = font.index_to_location_format() {
+            let format = match font.head.index_to_loc_format() {
+                0 => Some(IndexToLocationFormat::Short),
+                1 => Some(IndexToLocationFormat::Long),
+                _ => None,
+            };
+
+            if let Some(format) = format {
                 font.loca = loca::Table::parse(data, font.number_of_glyphs, format);
             }
         }
@@ -870,16 +890,6 @@ impl<'a> Font<'a> {
         }
     }
 
-    /// Returns glyphs index to location format.
-    #[inline]
-    pub(crate) fn index_to_location_format(&self) -> Option<IndexToLocationFormat> {
-        match self.head.index_to_loc_format() {
-            0 => Some(IndexToLocationFormat::Short),
-            1 => Some(IndexToLocationFormat::Long),
-            _ => None,
-        }
-    }
-
     /// Returns font's units per EM.
     ///
     /// Returns `None` when value is not in a 16..=16384 range.
@@ -1000,8 +1010,6 @@ impl<'a> Font<'a> {
         cmap::glyph_variation_index(self.cmap.as_ref()?, c, variation)
     }
 
-    // TODO: maybe fallback to bbox when no hmtx/vmtx?
-
     /// Returns glyph's advance.
     ///
     /// Supports both horizontal and vertical fonts.
@@ -1064,7 +1072,7 @@ impl<'a> Font<'a> {
     /// [Glyph Class Definition Table](
     /// https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#glyph-class-definition-table).
     pub fn has_glyph_classes(&self) -> bool {
-        self.glyph_class(GlyphId(0)).is_some()
+        try_opt_or!(self.gdef, false).has_glyph_classes()
     }
 
     /// Returns glyph's class according to
@@ -1246,6 +1254,12 @@ impl<'a> Font<'a> {
         }
 
         Some(())
+    }
+
+    /// Returns current normalized variation coordinates.
+    #[inline]
+    pub fn variation_coordinates(&self) -> &[NormalizedCoord] {
+        self.coordinates.as_slice()
     }
 
     #[inline]

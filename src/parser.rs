@@ -589,8 +589,7 @@ impl<'a> Stream<'a> {
     }
 
     #[inline]
-    pub fn read_offsets16(&mut self, data: &'a [u8]) -> Option<Offsets16<'a, Offset16>> {
-        let count: u16 = self.read()?;
+    pub fn read_offsets16(&mut self, count: u16, data: &'a [u8]) -> Option<Offsets16<'a, Offset16>> {
         let offsets = self.read_array16(count)?;
         Some(Offsets16 { data, offsets })
     }
