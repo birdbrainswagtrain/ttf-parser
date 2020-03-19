@@ -1038,7 +1038,8 @@ impl<'a> Font<'a> {
             advance += hvar::glyph_advance_offset(self.hvar?, glyph_id, self.coords())?;
         }
 
-        u16::try_num_from(advance)
+        // We can't use `round()` in `no_std`, so this is the next best thing.
+        u16::try_num_from(advance + 0.5)
     }
 
     /// Returns glyph's vertical advance.
@@ -1052,7 +1053,7 @@ impl<'a> Font<'a> {
             advance += hvar::glyph_advance_offset(self.vvar?, glyph_id, self.coords())?;
         }
 
-        u16::try_num_from(advance)
+        u16::try_num_from(advance + 0.5)
     }
 
     /// Returns glyph's horizontal side bearing.
@@ -1066,7 +1067,7 @@ impl<'a> Font<'a> {
             bearing += hvar::glyph_side_bearing_offset(self.hvar?, glyph_id, self.coords())?;
         }
 
-        i16::try_num_from(bearing)
+        i16::try_num_from(bearing + 0.5)
     }
 
     /// Returns glyph's vertical side bearing.
@@ -1080,7 +1081,7 @@ impl<'a> Font<'a> {
             bearing += hvar::glyph_side_bearing_offset(self.vvar?, glyph_id, self.coords())?;
         }
 
-        i16::try_num_from(bearing)
+        i16::try_num_from(bearing + 0.5)
     }
 
     /// Returns glyph's vertical origin according to
