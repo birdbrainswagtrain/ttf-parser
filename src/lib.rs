@@ -1397,6 +1397,12 @@ impl<'a> Font<'a> {
         Some(())
     }
 
+    /// Returns current normalized variation coordinates.
+    #[inline]
+    pub fn variation_coordinates(&self) -> &[NormalizedCoord] {
+        self.coordinates.as_slice()
+    }
+
     #[inline]
     fn metrics_var_offset(&self, tag: Tag) -> f32 {
         self.mvar.and_then(|table| table.metrics_offset(tag, self.coords())).unwrap_or(0.0)
