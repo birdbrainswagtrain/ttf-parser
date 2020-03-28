@@ -52,9 +52,15 @@ There are roughly three types of TrueType tables:
 | Variable fonts    | ✓                      | ✓                   |                                |
 | Rendering         |                        | ✓                   | ~<sup>2</sup>                  |
 | `avar` table      | ✓                      | ✓                   |                                |
+| `bdat` table      |                        | ✓                   |                                |
+| `bloc` table      |                        | ✓                   |                                |
+| `CBDT` table      | ✓                      | ✓                   |                                |
+| `CBLC` table      | ✓                      | ✓                   |                                |
 | `CFF `&nbsp;table | ✓                      | ✓                   | ✓                              |
 | `CFF2` table      | ✓                      | ✓                   |                                |
 | `cmap` table      | ~ (no 8; Unicode-only) | ✓                   | ~ (no 2,8,10,14; Unicode-only) |
+| `EBDT` table      |                        | ✓                   |                                |
+| `EBLC` table      |                        | ✓                   |                                |
 | `fvar` table      | ✓                      | ✓                   |                                |
 | `gasp` table      |                        | ✓                   |                                |
 | `GDEF` table      | ~                      |                     |                                |
@@ -72,14 +78,15 @@ There are roughly three types of TrueType tables:
 | `name` table      | ✓                      | ✓                   |                                |
 | `OS/2` table      | ✓                      | ✓                   |                                |
 | `post` table      | ✓                      | ✓                   |                                |
-| `SVG `&nbsp;table |                        |                     | ✓                              |
+| `sbix` table      | ✓                      | ✓                   |                                |
+| `SVG `&nbsp;table | ✓                      |                     | ✓                              |
 | `vhea` table      | ✓                      | ✓                   |                                |
 | `vmtx` table      | ✓                      | ✓                   |                                |
 | `VORG` table      | ✓                      | ✓                   |                                |
 | `VVAR` table      | ✓                      | ✓                   |                                |
 | Language          | Rust + C API           | C                   | C                              |
-| Dynamic lib size  | ~250KiB                | ~760KiB<sup>3</sup> | ? (header-only)                |
-| Tested version    | 0.4.0                  | 2.9.1               | 1.24                           |
+| Dynamic lib size  | ~300KiB                | ~760KiB<sup>3</sup> | ? (header-only)                |
+| Tested version    | 0.5.0                  | 2.9.1               | 1.24                           |
 | License           | MIT / Apache-2.0       | FTL/GPLv2           | public domain                  |
 
 Legend:
@@ -105,12 +112,12 @@ The second one is basically a tiny language with a stack-based VM, which makes i
 
 The [benchmark](./benches/outline/) tests how long it takes to outline all glyphs in the font.
 
-| Table/Library | ttf-parser         | FreeType       | stb_truetype     |
-| ------------- | -----------------: | -------------: | ---------------: |
-| `glyf`        |     `786'180 ns`   | `1'194'395 ns` | **`695'873 ns`** |
-| `gvar`        | **`3'119'105 ns`** | `3'594'170 ns` |                - |
-| `CFF`         | **`1'237'364 ns`** | `5'806'994 ns` |  `2'862'264 ns`  |
-| `CFF2`        | **`1'893'664 ns`** | `6'782'960 ns` |                - |
+| Table/Library | ttf-parser     | FreeType   | stb_truetype   |
+| ------------- | -------------: | ---------: | -------------: |
+| `glyf`        |   `0.786 ms`   | `1.194 ms` | **`0.695 ms`** |
+| `gvar`        | **`3.119 ms`** | `3.594 ms` |              - |
+| `CFF`         | **`1.237 ms`** | `5.806 ms` |   `2.862 ms`   |
+| `CFF2`        | **`1.893 ms`** | `6.782 ms` |              - |
 
 **Note:** FreeType is surprisingly slow, so I'm worried that I've messed something up.
 

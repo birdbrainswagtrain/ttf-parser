@@ -166,8 +166,8 @@ pub struct FeatureIndex(pub u16);
 
 impl FromData for FeatureIndex {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        FeatureIndex(u16::parse(data))
+    fn parse(data: &[u8]) -> Option<Self> {
+        u16::parse(data).map(FeatureIndex)
     }
 }
 
@@ -183,8 +183,8 @@ pub struct LookupIndex(pub u16);
 
 impl FromData for LookupIndex {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        LookupIndex(u16::parse(data))
+    fn parse(data: &[u8]) -> Option<Self> {
+        u16::parse(data).map(LookupIndex)
     }
 }
 
@@ -593,12 +593,12 @@ struct FeatureTableSubstitutionRecord {
 impl FromData for FeatureTableSubstitutionRecord {
     const SIZE: usize = 6;
 
-    fn parse(data: &[u8]) -> Self {
-        let mut s = SafeStream::new(data);
-        FeatureTableSubstitutionRecord {
-            index: s.read(),
-            table_offset: s.read(),
-        }
+    fn parse(data: &[u8]) -> Option<Self> {
+        let mut s = Stream::new(data);
+        Some(FeatureTableSubstitutionRecord {
+            index: s.read()?,
+            table_offset: s.read()?,
+        })
     }
 }
 
@@ -669,8 +669,8 @@ impl<'a> CoverageTable<'a> {
 pub struct Class(pub u16);
 
 impl FromData for Class {
-    fn parse(data: &[u8]) -> Self {
-        Class(SafeStream::new(data).read())
+    fn parse(data: &[u8]) -> Option<Self> {
+        u16::parse(data).map(Class)
     }
 }
 

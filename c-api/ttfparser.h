@@ -11,13 +11,63 @@
 #include <stdint.h>
 
 #define TTFP_MAJOR_VERSION 0
-#define TTFP_MINOR_VERSION 4
+#define TTFP_MINOR_VERSION 5
 #define TTFP_PATCH_VERSION 0
-#define TTFP_VERSION "0.4.0"
+#define TTFP_VERSION "0.5.0"
 
-#ifdef __cplusplus
-extern "C" {
-#endif
+/**
+ * @brief A table name.
+ */
+typedef enum {
+    TTFP_TABLE_NAME_AXIS_VARIATIONS = 0,
+    TTFP_TABLE_NAME_CHARACTER_TO_GLYPH_INDEX_MAPPING,
+    TTFP_TABLE_NAME_COLOR_BITMAP_DATA,
+    TTFP_TABLE_NAME_COLOR_BITMAP_LOCATION,
+    TTFP_TABLE_NAME_COMPACT_FONT_FORMAT,
+    TTFP_TABLE_NAME_COMPACT_FONT_FORMAT2,
+    TTFP_TABLE_NAME_FONT_VARIATIONS,
+    TTFP_TABLE_NAME_GLYPH_DATA,
+    TTFP_TABLE_NAME_GLYPH_DEFINITION,
+    TTFP_TABLE_NAME_GLYPH_VARIATIONS,
+    TTFP_TABLE_NAME_HEADER,
+    TTFP_TABLE_NAME_HORIZONTAL_HEADER,
+    TTFP_TABLE_NAME_HORIZONTAL_METRICS,
+    TTFP_TABLE_NAME_HORIZONTAL_METRICS_VARIATIONS,
+    TTFP_TABLE_NAME_INDEX_TO_LOCATION,
+    TTFP_TABLE_NAME_KERNING,
+    TTFP_TABLE_NAME_MAXIMUM_PROFILE,
+    TTFP_TABLE_NAME_METRICS_VARIATIONS,
+    TTFP_TABLE_NAME_NAMING,
+    TTFP_TABLE_NAME_POST_SCRIPT,
+    TTFP_TABLE_NAME_SCALABLE_VECTOR_GRAPHICS,
+    TTFP_TABLE_NAME_STANDARD_BITMAP_GRAPHICS,
+    TTFP_TABLE_NAME_VERTICAL_HEADER,
+    TTFP_TABLE_NAME_VERTICAL_METRICS,
+    TTFP_TABLE_NAME_VERTICAL_METRICS_VARIATIONS,
+    TTFP_TABLE_NAME_VERTICAL_ORIGIN,
+    TTFP_TABLE_NAME_WINDOWS_METRICS,
+} ttfp_table_name;
+
+/**
+ * @brief A list of glyph classes.
+ */
+typedef enum {
+    TTFP_GLYPH_CLASS_UNKNOWN = 0,
+    TTFP_GLYPH_CLASS_BASE,
+    TTFP_GLYPH_CLASS_LIGATURE,
+    TTFP_GLYPH_CLASS_MARK,
+    TTFP_GLYPH_CLASS_COMPONENT,
+} ttfp_glyph_class;
+
+/**
+ * @brief A glyph image format.
+ */
+typedef enum {
+    TTFP_IMAGE_FORMAT_PNG = 0,
+    TTFP_IMAGE_FORMAT_JPEG,
+    TTFP_IMAGE_FORMAT_TIFF,
+    TTFP_IMAGE_FORMAT_SVG,
+} ttfp_image_format;
 
 /**
  * @brief An opaque pointer to the font structure.
@@ -25,7 +75,78 @@ extern "C" {
 typedef struct ttfp_font ttfp_font;
 
 /**
- * @brief A tag type.
+ * @brief A name record.
+ *
+ * https://docs.microsoft.com/en-us/typography/opentype/spec/name#name-records
+ */
+typedef struct {
+    uint16_t platform_id;
+    uint16_t encoding_id;
+    uint16_t language_id;
+    uint16_t name_id;
+    uint16_t name_size;
+} ttfp_name_record;
+
+/**
+ * @brief A line metrics.
+ *
+ * Used for underline and strikeout.
+ */
+typedef struct {
+    int16_t position;
+    int16_t thickness;
+} ttfp_line_metrics;
+
+/**
+ * @brief A script metrics used by subscript and superscript.
+ */
+typedef struct {
+    int16_t x_size;
+    int16_t y_size;
+    int16_t x_offset;
+    int16_t y_offset;
+} ttfp_script_metrics;
+
+/**
+ * @brief An outline building interface.
+ */
+typedef struct {
+    void (*move_to)(float x, float y, void *data);
+    void (*line_to)(float x, float y, void *data);
+    void (*quad_to)(float x1, float y1, float x, float y, void *data);
+    void (*curve_to)(float x1, float y1, float x2, float y2, float x, float y, void *data);
+    void (*close_path)(void *data);
+} ttfp_outline_builder;
+
+/**
+ * @brief A rectangle.
+ */
+typedef struct {
+    int16_t x_min;
+    int16_t y_min;
+    int16_t x_max;
+    int16_t y_max;
+} ttfp_rect;
+
+/**
+ * @brief A glyph image.
+ *
+ * An image offset and size isn't defined in all tables, so `x`, `y`, `width` and `height`
+ * can be set to 0.
+ */
+typedef struct {
+    int16_t x;
+    int16_t y;
+    uint16_t width;
+    uint16_t height;
+    ttfp_image_format format;
+    /**< A raw image data as is. It's up to the caller to decode PNG, JPEG, etc. */
+    const char *data;
+    uint32_t len;
+} ttfp_glyph_image;
+
+/**
+ * A 4-byte tag.
  */
 typedef uint32_t ttfp_tag;
 
@@ -36,50 +157,9 @@ typedef uint32_t ttfp_tag;
     ((uint32_t)(c4)&0xFF)))
 
 /**
- * @brief A glyph's tight bounding box.
- */
-typedef struct ttfp_rect {
-    int16_t x_min;
-    int16_t y_min;
-    int16_t x_max;
-    int16_t y_max;
-} ttfp_rect;
-
-/**
- * @brief A line metrics.
- */
-typedef struct ttfp_line_metrics {
-    int16_t position;
-    int16_t thickness;
-} ttfp_line_metrics;
-
-/**
- * @brief A script metrics.
- */
-typedef struct ttfp_script_metrics {
-    int16_t x_size;
-    int16_t y_size;
-    int16_t x_offset;
-    int16_t y_offset;
-} ttfp_script_metrics;
-
-/**
- * @brief A name record.
- *
- * https://docs.microsoft.com/en-us/typography/opentype/spec/name#name-records
- */
-typedef struct ttfp_name_record {
-    uint16_t platform_id;
-    uint16_t encoding_id;
-    uint16_t language_id;
-    uint16_t name_id;
-    uint16_t name_size;
-} ttfp_name_record;
-
-/**
  * @brief A variation axis.
  */
-typedef struct ttfp_variation_axis {
+typedef struct {
     ttfp_tag tag;
     float min_value;
     float def_value;
@@ -88,58 +168,9 @@ typedef struct ttfp_variation_axis {
     bool hidden;
 } ttfp_variation_axis;
 
-/**
- * @brief An outline building interface.
- */
-typedef struct ttfp_outline_builder {
-    void (*move_to)(float x, float y, void *data);
-    void (*line_to)(float x, float y, void *data);
-    void (*quad_to)(float x1, float y1, float x, float y, void *data);
-    void (*curve_to)(float x1, float y1, float x2, float y2, float x, float y, void *data);
-    void (*close_path)(void *data);
-} ttfp_outline_builder;
-
-/**
- * @brief A list of supported tables.
- */
-typedef enum ttfp_table_name {
-    TTFP_TABLE_AXIS_VARIATIONS = 0,
-    TTFP_TABLE_CHARACTER_TO_GLYPH_INDEX_MAPPING,
-    TTFP_TABLE_COMPACT_FONT_FORMAT,
-    TTFP_TABLE_COMPACT_FONT_FORMAT_2,
-    TTFP_TABLE_FONT_VARIATIONS,
-    TTFP_TABLE_GLYPH_DATA,
-    TTFP_TABLE_GLYPH_DEFINITION,
-    TTFP_TABLE_GLYPH_POSITIONING,
-    TTFP_TABLE_GLYPH_SUBSTITUTION,
-    TTFP_TABLE_GLYPH_VARIATIONS,
-    TTFP_TABLE_HEADER,
-    TTFP_TABLE_HORIZONTAL_HEADER,
-    TTFP_TABLE_HORIZONTAL_METRICS,
-    TTFP_TABLE_HORIZONTAL_METRICS_VARIATIONS,
-    TTFP_TABLE_INDEX_TO_LOCATION,
-    TTFP_TABLE_KERNING,
-    TTFP_TABLE_MAXIMUM_PROFILE,
-    TTFP_TABLE_METRICS_VARIATIONS,
-    TTFP_TABLE_NAMING,
-    TTFP_TABLE_POST_SCRIPT,
-    TTFP_TABLE_VERTICAL_HEADER,
-    TTFP_TABLE_VERTICAL_METRICS,
-    TTFP_TABLE_VERTICAL_METRICS_VARIATIONS,
-    TTFP_TABLE_VERTICAL_ORIGIN,
-    TTFP_TABLE_WINDOWS_METRICS,
-} ttfp_table_name;
-
-/**
- * @brief A list of glyph classes.
- */
-typedef enum ttfp_glyph_class {
-    TTFP_GLYPH_CLASS_UNKNOWN = 0,
-    TTFP_GLYPH_CLASS_BASE,
-    TTFP_GLYPH_CLASS_LIGATURE,
-    TTFP_GLYPH_CLASS_MARK,
-    TTFP_GLYPH_CLASS_COMPONENT,
-} ttfp_glyph_class;
+#ifdef __cplusplus
+extern "C" {
+#endif // __cplusplus
 
 /**
  * @brief Initializes the library log.
@@ -517,6 +548,33 @@ bool ttfp_outline_glyph(const ttfp_font *font,
 bool ttfp_get_glyph_bbox(const ttfp_font *font, uint16_t glyph_id, ttfp_rect *bbox);
 
 /**
+ * @brief Returns a reference to a glyph image.
+ *
+ * A font can define a glyph using a raster or a vector image instead of a simple outline.
+ * Which is primarily used for emojis. This method should be used to access those images.
+ *
+ * `pixels_per_em` allows selecting a preferred image size. While the chosen size will
+ * be closer to an upper one. So when font has 64px and 96px images and `pixels_per_em`
+ * is set to 72, 96px image will be returned.
+ * To get the largest image simply use `SHRT_MAX`.
+ * This property has no effect in case of SVG.
+ *
+ * Note that this method will return an encoded image. It should be decoded
+ * (in case of PNG, JPEG, etc.), rendered (in case of SVG) or even decompressed
+ * (in case of SVGZ) by the caller. We don't validate or preprocess it in any way.
+ *
+ * Also, a font can contain both: images and outlines. So when this method returns `None`
+ * you should also try `ttfp_outline_glyph()` afterwards.
+ *
+ * There are multiple ways an image can be stored in a TrueType font
+ * and we support `sbix`, `CBLC`+`CBDT` and `SVG`.
+ */
+bool ttfp_get_glyph_image(const ttfp_font *font,
+                          uint16_t glyph_id,
+                          uint16_t pixels_per_em,
+                          ttfp_glyph_image *glyph_image);
+
+/**
  * @brief Returns the amount of variation axes.
  */
 uint16_t ttfp_get_variation_axes_count(const ttfp_font *font);
@@ -547,7 +605,7 @@ bool ttfp_get_variation_axis_by_tag(const ttfp_font *font, ttfp_tag tag, ttfp_va
 bool ttfp_set_variation(ttfp_font *font, ttfp_tag axis, float value);
 
 #ifdef __cplusplus
-}
-#endif
+} // extern "C"
+#endif // __cplusplus
 
 #endif /* TTFP_H */

@@ -1,4 +1,6 @@
 pub mod avar;
+pub mod cbdt;
+pub mod cblc;
 pub mod cff2;
 pub mod cff;
 pub mod cmap;
@@ -17,4 +19,6 @@ pub mod mvar;
 pub mod name;
 pub mod os2;
 pub mod post;
+pub mod sbix;
+pub mod svg;
 pub mod vorg;

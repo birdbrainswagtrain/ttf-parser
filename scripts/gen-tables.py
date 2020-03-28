@@ -85,8 +85,9 @@ class TtfUInt24(TtfType):
         return 3
 
     def print(self, offset: int) -> None:
-        print(f'(self.data[{offset}] as u32) << 16 | (self.data[{offset + 1}] as u32) << 8 '
-              f'| self.data[{offset + 2}] as u32')
+        print(f'u32::from_be_bytes(['
+              f'    0, self.data[{offset}], self.data[{offset + 1}], self.data[{offset + 2}]'
+              f'])')
 
 
 class TtfUInt32(TtfType):
@@ -191,9 +192,9 @@ class TtfTag(TtfType):
         return 4
 
     def print(self, offset: int) -> None:
-        print('use core::convert::TryInto;')
-        print('// Unwrap is safe, because an array and a slice have the same size.')
-        print(f'Tag::from_bytes(&self.data[{offset}..{offset + self.size()}].try_into().unwrap())')
+        print(f'Tag(u32::from_be_bytes(['
+              f'    self.data[{offset}], self.data[{offset + 1}], self.data[{offset + 2}], self.data[{offset + 3}]'
+              f']))')
 
 
 class TtfFixed(TtfType):
@@ -339,6 +340,21 @@ NAME_RECORD_TABLE = [
     TableRow(True,  TtfUInt16(),   'nameID'),
     TableRow(True,  TtfUInt16(),   'length'),
     TableRow(True,  TtfUInt16(),   'offset'),
+]
+
+# https://docs.microsoft.com/en-us/typography/opentype/spec/kern
+# In the kern table, coverage is stored as uint16, but we are using two uint8 to simply the code.
+KERN_COVERAGE = [
+    TableRow(True,  TtfUInt8(),   'coverage'),
+    TableRow(True,  TtfUInt8(),   'format'),
+]
+
+# https://docs.microsoft.com/en-us/typography/opentype/spec/kern
+# In the kern table, a kerning pair is stored as two uint16, but we are using one uint32
+# so we can use binary search.
+KERNING_RECORD = [
+    TableRow(True,  TtfUInt32(),  'pair'),
+    TableRow(True,  TtfInt16(),   'value'),
 ]
 
 # https://docs.microsoft.com/en-us/typography/opentype/spec/cmap#encoding-records-and-encodings
@@ -504,6 +520,14 @@ GSUB_GPOS_FEATURE_VARIATION_RECORD = [
     TableRow(True,  TtfOffset32(),  'featureTableSubstitutionOffset'),
 ]
 
+# https://docs.microsoft.com/en-us/typography/opentype/spec/svg#svg-document-list
+SVG_DOC_RECORD = [
+    TableRow(True,  TtfGlyphId(),           'startGlyphID'),
+    TableRow(True,  TtfGlyphId(),           'endGlyphID'),
+    TableRow(True,  TtfOptionalOffset32(),  'svgDocOffset'),
+    TableRow(True,  TtfUInt32(),            'svgDocLength'),
+]
+
 # https://docs.microsoft.com/en-us/typography/opentype/spec/post
 POST_TABLE = [
     TableRow(False, TtfFixed(),     'version'),
@@ -534,11 +558,9 @@ def print_struct_size(size: int) -> None:
 def print_constructor(name: str, size: int, owned: bool) -> None:
     print('#[inline(always)]')
     if owned:
-        print('pub fn new(input: &[u8]) -> Self {')
-        print('    let mut data = [0u8; Self::SIZE];')
-        # Do not use `copy_from_slice`, because it's slower.
-        print('    data.clone_from_slice(input);')
-        print(f'    {name} {{ data }}')
+        print('pub fn new(input: &[u8]) -> Option<Self> {')
+        print('    use core::convert::TryInto;')
+        print(f'    input.try_into().ok().map(|data| {name} {{ data }})')
         print('}')
     else:
         print('pub fn new(input: &\'a [u8]) -> Self {')
@@ -575,7 +597,7 @@ def print_impl_from_data(name: str) -> None:
     print(f'    const SIZE: usize = {name}::SIZE;')
     print()
     print('    #[inline]')
-    print('    fn parse(data: &[u8]) -> Self {')
+    print('    fn parse(data: &[u8]) -> Option<Self> {')
     print('        Self::new(data)')
     print('    }')
     print('}')
@@ -703,6 +725,14 @@ print('pub mod name {')
 generate_table(NAME_RECORD_TABLE, 'NameRecord', owned=True)
 print('}')
 print()
+print('pub mod kern {')
+print('use crate::parser::FromData;')
+print()
+generate_table(KERN_COVERAGE, 'Coverage', owned=True, impl_from_data=True)
+print()
+generate_table(KERNING_RECORD, 'KerningRecord', owned=True, impl_from_data=True)
+print('}')
+print()
 print('pub mod gdef {')
 print('use core::ops::RangeInclusive;')
 print('use crate::GlyphId;')
@@ -756,5 +786,12 @@ print('use crate::parser::FromData;')
 print()
 generate_table(VARIATION_STORE_REGION_AXIS_COORDINATES_RECORD, 'RegionAxisCoordinatesRecord',
                owned=True, impl_from_data=True)
+print('}')
+print()
+print('pub mod svg {')
+print('use crate::GlyphId;')
+print('use crate::parser::{FromData, Offset32};')
+print()
+generate_table(SVG_DOC_RECORD, 'SvgDocumentRecord', owned=True, impl_from_data=True)
 print('}')
 print()

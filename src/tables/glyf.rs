@@ -4,7 +4,7 @@
 
 use core::num::NonZeroU16;
 
-use crate::parser::{Stream, SafeStream, F2DOT14, LazyArray16, NumConv, f32_bound};
+use crate::parser::{Stream, F2DOT14, LazyArray16, NumFrom, f32_bound};
 use crate::{loca, GlyphId, OutlineBuilder, Rect, BBox};
 
 pub(crate) struct Builder<'a> {
@@ -199,6 +199,7 @@ impl Default for Transform {
 }
 
 impl core::fmt::Debug for Transform {
+    #[inline]
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         write!(f, "Transform({} {} {} {} {} {})", self.a, self.b, self.c, self.d, self.e, self.f)
     }
@@ -351,7 +352,7 @@ impl<'a> EndpointsIter<'a> {
     fn next(&mut self) -> bool {
         if self.left == 0 {
             if let Some(end) = self.endpoints.get(self.index) {
-                let prev = self.endpoints.at(self.index - 1);
+                let prev = self.endpoints.get(self.index - 1).unwrap_or(0);
                 // Malformed font can have endpoints not in increasing order,
                 // so we have to use checked_sub.
                 self.left = end.checked_sub(prev).unwrap_or(0);
@@ -413,7 +414,7 @@ impl<'a> Iterator for FlagsIter<'a> {
 
 #[derive(Clone, Default)]
 struct CoordsIter<'a> {
-    stream: SafeStream<'a>, // We've already checked the coords data, so it's safe to use SafeStream.
+    stream: Stream<'a>,
     prev: i16, // Points are stored as deltas, so we have to keep the previous one.
 }
 
@@ -421,7 +422,7 @@ impl<'a> CoordsIter<'a> {
     #[inline]
     fn new(data: &'a [u8]) -> Self {
         CoordsIter {
-            stream: SafeStream::new(data),
+            stream: Stream::new(data),
             prev: 0,
         }
     }
@@ -431,14 +432,16 @@ impl<'a> CoordsIter<'a> {
         // See https://docs.microsoft.com/en-us/typography/opentype/spec/glyf#simple-glyph-description
         // for details about Simple Glyph Flags processing.
 
+        // We've already checked the coords data, so it's safe fallback to 0.
+
         let mut n = 0;
         if is_short {
-            n = i16::from(self.stream.read::<u8>());
+            n = i16::from(self.stream.read::<u8>().unwrap_or(0));
             if !is_same_or_short {
                 n = -n;
             }
         } else if !is_same_or_short {
-            n = self.stream.read();
+            n = self.stream.read().unwrap_or(0);
         }
 
         self.prev = self.prev.wrapping_add(n);
@@ -496,7 +499,7 @@ impl CompositeGlyphFlags {
 pub const MAX_COMPONENTS: u8 = 32;
 
 #[inline]
-pub fn outline(
+pub(crate) fn outline(
     loca_table: loca::Table,
     glyf_table: &[u8],
     glyph_id: GlyphId,
@@ -509,7 +512,7 @@ pub fn outline(
 }
 
 #[inline]
-pub fn glyph_bbox(
+pub(crate) fn glyph_bbox(
     loca_table: loca::Table,
     glyf_table: &[u8],
     glyph_id: GlyphId,
@@ -555,13 +558,13 @@ fn outline_impl(
 
         // u16 casting is safe, since we already checked that the value is positive.
         let number_of_contours = NonZeroU16::new(number_of_contours as u16)?;
-        for point in parse_simple_outline(s.tail()?, number_of_contours)? {
+        for point in parse_simple_outline(s.tail(), number_of_contours)? {
             builder.push_point(f32::from(point.x), f32::from(point.y),
                                point.on_curve_point, point.last_point);
         }
     } else if number_of_contours < 0 {
         // Composite glyph.
-        for comp in CompositeGlyphIter::new(s.tail()?) {
+        for comp in CompositeGlyphIter::new(s.tail()) {
             if let Some(range) = loca_table.glyph_range(comp.glyph_id) {
                 if let Some(glyph_data) = glyf_table.get(range) {
                     let transform = Transform::combine(builder.transform, comp.transform);
@@ -598,9 +601,9 @@ pub fn parse_simple_outline(
     let instructions_len: u16 = s.read()?;
     s.advance(usize::from(instructions_len));
 
-    let flags_offset = s.offset();
+    let flags_offset = glyph_data.len() - s.left();
     let (x_coords_len, y_coords_len) = resolve_coords_len(&mut s, points_total)?;
-    let x_coords_offset = s.offset();
+    let x_coords_offset = glyph_data.len() - s.left();
     let y_coords_offset = x_coords_offset + usize::num_from(x_coords_len);
     let y_coords_end = y_coords_offset + usize::num_from(y_coords_len);
 

@@ -1,5 +1,5 @@
 use core::ops::Range;
-use core::convert::TryFrom;
+use core::convert::{TryFrom, TryInto};
 
 /// A trait for parsing raw binary data.
 ///
@@ -15,54 +15,48 @@ pub trait FromData: Sized {
     const SIZE: usize = core::mem::size_of::<Self>();
 
     /// Parses an object from a raw data.
-    ///
-    /// This method **must** not panic and **must** not read past the bounds.
-    fn parse(data: &[u8]) -> Self;
+    fn parse(data: &[u8]) -> Option<Self>;
 }
 
 impl FromData for u8 {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        data[0]
+    fn parse(data: &[u8]) -> Option<Self> {
+        data.get(0).copied()
     }
 }
 
 impl FromData for i8 {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        data[0] as i8
+    fn parse(data: &[u8]) -> Option<Self> {
+        data.get(0).copied().map(|n| n as i8)
     }
 }
 
 impl FromData for u16 {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        u16::from_be_bytes([data[0], data[1]])
+    fn parse(data: &[u8]) -> Option<Self> {
+        data.try_into().ok().map(u16::from_be_bytes)
     }
 }
 
 impl FromData for i16 {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        i16::from_be_bytes([data[0], data[1]])
+    fn parse(data: &[u8]) -> Option<Self> {
+        data.try_into().ok().map(i16::from_be_bytes)
     }
 }
 
 impl FromData for u32 {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        // For u32 it's faster to use TryInto, but for u16/i16 it's faster to index.
-        use core::convert::TryInto;
-        u32::from_be_bytes(data.try_into().unwrap())
+    fn parse(data: &[u8]) -> Option<Self> {
+        data.try_into().ok().map(u32::from_be_bytes)
     }
 }
 
 impl FromData for i32 {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        // For i32 it's faster to use TryInto, but for u16/i16 it's faster to index.
-        use core::convert::TryInto;
-        i32::from_be_bytes(data.try_into().unwrap())
+    fn parse(data: &[u8]) -> Option<Self> {
+        data.try_into().ok().map(i32::from_be_bytes)
     }
 }
 
@@ -75,8 +69,9 @@ impl FromData for U24 {
     const SIZE: usize = 3;
 
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        U24(u32::from(data[0]) << 16 | u32::from(data[1]) << 8 | u32::from(data[2]))
+    fn parse(data: &[u8]) -> Option<Self> {
+        let data: [u8; 3] = data.try_into().ok()?;
+        Some(U24(u32::from_be_bytes([0, data[0], data[1], data[2]])))
     }
 }
 
@@ -95,8 +90,8 @@ impl F2DOT14 {
 
 impl FromData for F2DOT14 {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        F2DOT14(i16::parse(data))
+    fn parse(data: &[u8]) -> Option<Self> {
+        i16::parse(data).map(F2DOT14)
     }
 }
 
@@ -109,21 +104,21 @@ impl FromData for Fixed {
     const SIZE: usize = 4;
 
     #[inline]
-    fn parse(data: &[u8]) -> Self {
+    fn parse(data: &[u8]) -> Option<Self> {
         // TODO: is it safe to cast?
-        Fixed(i32::parse(data) as f32 / 65536.0)
+        i32::parse(data).map(|n| Fixed(n as f32 / 65536.0))
     }
 }
 
 
-pub trait NumConv<T>: Sized {
+pub trait NumFrom<T>: Sized {
     fn num_from(_: T) -> Self;
 }
 
 // Rust doesn't implement `From<u32> for usize`,
 // because it has to support 16 bit targets.
 // We don't, so we can allow this.
-impl NumConv<u32> for usize {
+impl NumFrom<u32> for usize {
     #[inline]
     fn num_from(v: u32) -> Self {
         debug_assert!(core::mem::size_of::<usize>() >= 4);
@@ -133,28 +128,31 @@ impl NumConv<u32> for usize {
 
 
 /// Just like TryFrom<N>, but for numeric types not supported by the Rust's std.
-pub trait TryNumConv<T>: Sized {
+pub trait TryNumFrom<T>: Sized {
     fn try_num_from(_: T) -> Option<Self>;
 }
 
-impl TryNumConv<f32> for i16 {
+impl TryNumFrom<f32> for i16 {
     #[inline]
     fn try_num_from(v: f32) -> Option<Self> {
         i32::try_num_from(v).and_then(|v| i16::try_from(v).ok())
     }
 }
 
-impl TryNumConv<f32> for u16 {
+impl TryNumFrom<f32> for u16 {
     #[inline]
     fn try_num_from(v: f32) -> Option<Self> {
         i32::try_num_from(v).and_then(|v| u16::try_from(v).ok())
     }
 }
 
-impl TryNumConv<f32> for i32 {
+impl TryNumFrom<f32> for i32 {
     #[inline]
     fn try_num_from(v: f32) -> Option<Self> {
         // Based on https://github.com/rust-num/num-traits/blob/master/src/cast.rs
+
+        // Float as int truncates toward zero, so we want to allow values
+        // in the exclusive range `(MIN-1, MAX+1)`.
 
         // We can't represent `MIN-1` exactly, but there's no fractional part
         // at this magnitude, so we can just use a `MIN` inclusive boundary.
@@ -200,18 +198,13 @@ impl<'a, T: FromData> LazyArray16<'a, T> {
         }
     }
 
-    pub(crate) fn at(&self, index: u16) -> T {
-        let start = usize::from(index) * T::SIZE;
-        let end = start + T::SIZE;
-        T::parse(&self.data[start..end])
-    }
-
     /// Returns a value at `index`.
+    #[inline]
     pub fn get(&self, index: u16) -> Option<T> {
         if index < self.len() {
             let start = usize::from(index) * T::SIZE;
             let end = start + T::SIZE;
-            Some(T::parse(&self.data[start..end]))
+            self.data.get(start..end).and_then(T::parse)
         } else {
             None
         }
@@ -279,13 +272,13 @@ impl<'a, T: FromData> LazyArray16<'a, T> {
             // mid is always in [0, size), that means mid is >= 0 and < size.
             // mid >= 0: by definition
             // mid < size: mid = size / 2 + size / 4 + size / 8 ...
-            let cmp = f(&self.at(mid));
+            let cmp = f(&self.get(mid)?);
             base = if cmp == Ordering::Greater { base } else { mid };
             size -= half;
         }
 
         // base is always in [0, size) because base <= mid.
-        let value = self.at(base);
+        let value = self.get(base)?;
         if f(&value) == Ordering::Equal { Some((base, value)) } else { None }
     }
 }
@@ -319,6 +312,7 @@ pub struct LazyArrayIter16<'a, T> {
 }
 
 impl<T: FromData> Default for LazyArrayIter16<'_, T> {
+    #[inline]
     fn default() -> Self {
         LazyArrayIter16 {
             data: LazyArray16::new(&[]),
@@ -372,18 +366,13 @@ impl<'a, T: FromData> LazyArray32<'a, T> {
         }
     }
 
-    pub(crate) fn at(&self, index: u32) -> T {
-        let start = usize::num_from(index) * T::SIZE;
-        let end = start + T::SIZE;
-        T::parse(&self.data[start..end])
-    }
-
     /// Returns a value at `index`.
+    #[inline]
     pub fn get(&self, index: u32) -> Option<T> {
         if index < self.len() {
             let start = usize::num_from(index) * T::SIZE;
             let end = start + T::SIZE;
-            Some(T::parse(&self.data[start..end]))
+            self.data.get(start..end).and_then(T::parse)
         } else {
             None
         }
@@ -393,6 +382,14 @@ impl<'a, T: FromData> LazyArray32<'a, T> {
     #[inline]
     pub fn len(&self) -> u32 {
         (self.data.len() / T::SIZE) as u32
+    }
+
+    /// Performs a binary search by specified `key`.
+    #[inline]
+    pub fn binary_search(&self, key: &T) -> Option<(u32, T)>
+        where T: Ord
+    {
+        self.binary_search_by(|p| p.cmp(key))
     }
 
     /// Performs a binary search using specified closure.
@@ -416,13 +413,13 @@ impl<'a, T: FromData> LazyArray32<'a, T> {
             // mid is always in [0, size), that means mid is >= 0 and < size.
             // mid >= 0: by definition
             // mid < size: mid = size / 2 + size / 4 + size / 8 ...
-            let cmp = f(&self.at(mid));
+            let cmp = f(&self.get(mid)?);
             base = if cmp == Ordering::Greater { base } else { mid };
             size -= half;
         }
 
         // base is always in [0, size) because base <= mid.
-        let value = self.at(base);
+        let value = self.get(base)?;
         if f(&value) == Ordering::Equal { Some((base, value)) } else { None }
     }
 }
@@ -479,157 +476,90 @@ impl<'a, T: FromData> Iterator for LazyArrayIter32<'a, T> {
 #[derive(Clone, Copy, Default)]
 pub struct Stream<'a> {
     data: &'a [u8],
-    offset: usize,
 }
 
 impl<'a> Stream<'a> {
     #[inline]
     pub fn new(data: &'a [u8]) -> Self {
-        Stream {
-            data,
-            offset: 0,
-        }
+        Stream { data }
     }
 
     #[inline]
-    pub fn new_at(data: &'a [u8], offset: usize) -> Self {
-        Stream {
-            data,
-            offset,
-        }
+    pub fn new_at(data: &'a [u8], offset: usize) -> Option<Self> {
+        data.get(offset..).map(Stream::new)
     }
 
     #[inline]
     pub fn at_end(&self) -> bool {
-        self.offset >= self.data.len()
+        self.data.is_empty()
     }
 
     #[inline]
     pub fn jump_to_end(&mut self) {
-        self.offset = self.data.len();
+        self.data = &[];
     }
 
     #[inline]
-    pub fn offset(&self) -> usize {
-        self.offset
+    pub fn left(&self) -> usize {
+        self.data.len()
     }
 
     #[inline]
-    pub fn tail(&self) -> Option<&'a [u8]> {
-        self.data.get(self.offset..self.data.len())
+    pub fn tail(&self) -> &'a [u8] {
+        self.data
     }
 
     #[inline]
     pub fn skip<T: FromData>(&mut self) {
-        self.offset += T::SIZE;
+        self.advance(T::SIZE)
     }
 
     #[inline]
     pub fn advance(&mut self, len: usize) {
-        self.offset += len;
+        self.data = self.data.get(len..self.data.len()).unwrap_or_default();
     }
 
     #[inline]
     pub fn advance_checked(&mut self, len: usize) -> Option<()> {
-        if self.offset + len <= self.data.len() {
-            self.offset += len;
-            Some(())
-        } else {
-            None
-        }
+        self.data = self.data.get(len..self.data.len())?;
+        Some(())
     }
 
     #[inline]
     pub fn read<T: FromData>(&mut self) -> Option<T> {
-        let start = self.offset;
-        self.offset += T::SIZE;
-        let end = self.offset;
-
-        let data = self.data.get(start..end)?;
-        Some(T::parse(data))
+        let v = self.data.get(0..T::SIZE).and_then(T::parse);
+        self.advance(T::SIZE);
+        v
     }
 
     #[inline]
-    pub fn read_at<T: FromData>(data: &[u8], mut offset: usize) -> Option<T> {
-        let start = offset;
-        offset += T::SIZE;
-        let end = offset;
-
-        let data = data.get(start..end)?;
-        Some(T::parse(data))
+    pub fn read_at<T: FromData>(data: &[u8], offset: usize) -> Option<T> {
+        Stream::new_at(data, offset).and_then(|mut s| s.read())
     }
 
     #[inline]
     pub fn read_bytes(&mut self, len: usize) -> Option<&'a [u8]> {
-        let start = self.offset;
-        self.offset += len;
-        self.data.get(start..self.offset)
+        let v = self.data.get(0..len)?;
+        self.advance(len);
+        Some(v)
     }
 
     #[inline]
     pub fn read_array16<T: FromData>(&mut self, count: u16) -> Option<LazyArray16<'a, T>> {
         let len = usize::from(count) * T::SIZE;
-
-        let start = self.offset;
-        self.offset += len;
-        let data = self.data.get(start..self.offset)?;
-
-        Some(LazyArray16::new(data))
+        self.read_bytes(len).map(LazyArray16::new)
     }
 
     #[inline]
     pub fn read_array32<T: FromData>(&mut self, count: u32) -> Option<LazyArray32<'a, T>> {
         let len = usize::num_from(count) * T::SIZE;
-
-        let start = self.offset;
-        self.offset += len;
-        let data = self.data.get(start..self.offset)?;
-
-        Some(LazyArray32::new(data))
+        self.read_bytes(len).map(LazyArray32::new)
     }
 
     #[inline]
     pub fn read_offsets16(&mut self, count: u16, data: &'a [u8]) -> Option<Offsets16<'a, Offset16>> {
         let offsets = self.read_array16(count)?;
         Some(Offsets16 { data, offsets })
-    }
-}
-
-
-/// A "safe" stream.
-///
-/// Unlike `Stream`, `SafeStream` doesn't perform bounds checking on each read.
-/// It leverages the type system, so we can sort of guarantee that
-/// we do not read past the bounds.
-///
-/// For example, if we are iterating a `LazyArray` we already checked it's size
-/// and we can't read past the bounds, so we can remove useless checks.
-///
-/// It's still not 100% guarantee, but it makes code easier to read and a bit faster.
-/// And we still backed by the Rust's bounds checking.
-#[derive(Clone, Copy, Default)]
-pub struct SafeStream<'a> {
-    data: &'a [u8],
-    offset: usize,
-}
-
-impl<'a> SafeStream<'a> {
-    #[inline]
-    pub fn new(data: &'a [u8]) -> Self {
-        SafeStream {
-            data,
-            offset: 0,
-        }
-    }
-
-    #[inline]
-    pub fn read<T: FromData>(&mut self) -> T {
-        let start = self.offset;
-        self.offset += T::SIZE;
-        let end = self.offset;
-
-        let data = &self.data[start..end];
-        T::parse(data)
     }
 }
 
@@ -644,6 +574,7 @@ pub trait Offset {
 pub struct Offset16(pub u16);
 
 impl Offset for Offset16 {
+    #[inline]
     fn to_usize(&self) -> usize {
         usize::from(self.0)
     }
@@ -651,8 +582,8 @@ impl Offset for Offset16 {
 
 impl FromData for Offset16 {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        Offset16(SafeStream::new(data).read())
+    fn parse(data: &[u8]) -> Option<Self> {
+        u16::parse(data).map(Offset16)
     }
 }
 
@@ -660,9 +591,9 @@ impl FromData for Option<Offset16> {
     const SIZE: usize = Offset16::SIZE;
 
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        let offset = Offset16::parse(data);
-        if offset.0 != 0 { Some(offset) } else { None }
+    fn parse(data: &[u8]) -> Option<Self> {
+        let offset = Offset16::parse(data)?;
+        if offset.0 != 0 { Some(Some(offset)) } else { Some(None) }
     }
 }
 
@@ -679,8 +610,8 @@ impl Offset for Offset32 {
 
 impl FromData for Offset32 {
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        Offset32(SafeStream::new(data).read())
+    fn parse(data: &[u8]) -> Option<Self> {
+        u32::parse(data).map(Offset32)
     }
 }
 
@@ -689,9 +620,9 @@ impl FromData for Option<Offset32> {
     const SIZE: usize = Offset32::SIZE;
 
     #[inline]
-    fn parse(data: &[u8]) -> Self {
-        let offset = Offset32::parse(data);
-        if offset.0 != 0 { Some(offset) } else { None }
+    fn parse(data: &[u8]) -> Option<Self> {
+        let offset = Offset32::parse(data)?;
+        if offset.0 != 0 { Some(Some(offset)) } else { Some(None) }
     }
 }
 
@@ -708,12 +639,12 @@ impl<'a, T: Offset + FromData> Offsets16<'a, T> {
         self.offsets.len() as u16
     }
 
-    fn at(&self, index: u16) -> T {
-        self.offsets.at(index)
+    fn get(&self, index: u16) -> Option<T> {
+        self.offsets.get(index)
     }
 
     pub fn slice(&self, index: u16) -> Option<&'a [u8]> {
-        let offset = self.offsets.at(index).to_usize();
+        let offset = self.offsets.get(index)?.to_usize();
         self.data.get(offset..self.data.len())
     }
 }
@@ -752,7 +683,7 @@ impl<'a, T: Offset + FromData> Iterator for OffsetsIter16<'a, T> {
             self.index += 1;
 
             // Skip NULL offsets.
-            if self.offsets.at(idx).is_null() {
+            if self.offsets.get(idx)?.is_null() {
                 return self.next();
             }
 
