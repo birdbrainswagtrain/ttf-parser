@@ -7,7 +7,7 @@ A high-level, safe, zero-allocation TrueType font parser.
   Basically, no direct access to font tables.
 - Zero heap allocations.
 - Zero unsafe.
-- Zero required dependencies. Logging is enabled by default.
+- Zero dependencies.
 - `no_std` compatible.
 - Fast.
 - Stateless. All parsing methods are immutable methods.
@@ -30,8 +30,6 @@ It doesn't mean that it will crash or panic on malformed fonts, only that the
 error handling will boil down to `Option::None`. So you will not get a detailed cause of an error.
 By doing so we can simplify an API quite a lot since otherwise, we will have to use
 `Result<Option<T>, Error>`.
-
-Some methods may print warnings, when the `logging` feature is enabled.
 */
 
 #![doc(html_root_url = "https://docs.rs/ttf-parser/0.5.0")]
@@ -61,18 +59,6 @@ macro_rules! try_opt_or {
     };
 }
 
-#[cfg(feature = "logging")]
-macro_rules! warn {
-    ($($arg:tt)+) => (
-        log::log!(log::Level::Warn, $($arg)+);
-    )
-}
-
-#[cfg(not(feature = "logging"))]
-macro_rules! warn {
-    ($($arg:tt)+) => () // do nothing
-}
-
 mod ggg;
 mod parser;
 mod raw;
@@ -84,6 +70,7 @@ mod writer;
 
 use tables::*;
 use parser::{Stream, FromData, Offset, NumFrom, TryNumFrom, i16_bound, f32_bound};
+use head::IndexToLocationFormat;
 pub use fvar::{VariationAxes, VariationAxis};
 pub use gdef::GlyphClass;
 pub use ggg::*;
@@ -453,14 +440,6 @@ pub struct GlyphImage<'a> {
 }
 
 
-#[allow(missing_docs)]
-#[derive(Clone, Copy, PartialEq, Debug)]
-pub(crate) enum IndexToLocationFormat {
-    Short,
-    Long,
-}
-
-
 /// A table name.
 #[repr(C)]
 #[derive(Clone, Copy, PartialEq, Debug)]
@@ -535,8 +514,8 @@ pub struct Font<'a> {
     gpos: Option<ggg::GsubGposTable<'a>>,
     gsub: Option<ggg::GsubGposTable<'a>>,
     gvar: Option<gvar::Table<'a>>,
-    head: raw::head::Table<'a>,
-    hhea: raw::hhea::Table<'a>,
+    head: &'a [u8],
+    hhea: &'a [u8],
     hmtx: Option<hmtx::Table<'a>>,
     hvar: Option<hvar::Table<'a>>,
     kern: Option<&'a [u8]>,
@@ -545,7 +524,7 @@ pub struct Font<'a> {
     name: Option<name::Names<'a>>,
     os_2: Option<os2::Table<'a>>,
     post: Option<post::Table<'a>>,
-    vhea: Option<raw::vhea::Table<'a>>,
+    vhea: Option<&'a [u8]>,
     vmtx: Option<hmtx::Table<'a>>,
     sbix: Option<&'a [u8]>,
     svg_: Option<&'a [u8]>,
@@ -567,11 +546,13 @@ impl<'a> Font<'a> {
     ///
     /// If an optional table has an invalid data it will be skipped.
     pub fn from_data(data: &'a [u8], index: u32) -> Option<Self> {
+        const OFFSET_TABLE_SIZE: usize = 12;
+
         let table_data = if let Some(n) = fonts_in_collection(data) {
             if index < n {
                 // https://docs.microsoft.com/en-us/typography/opentype/spec/otff#ttc-header
                 const OFFSET_32_SIZE: usize = 4;
-                let offset = raw::TTCHeader::SIZE + OFFSET_32_SIZE * usize::num_from(index);
+                let offset = OFFSET_TABLE_SIZE + OFFSET_32_SIZE * usize::num_from(index);
                 let font_offset: u32 = Stream::read_at(data, offset)?;
                 data.get(usize::num_from(font_offset) .. data.len())?
             } else {
@@ -582,7 +563,6 @@ impl<'a> Font<'a> {
         };
 
         // https://docs.microsoft.com/en-us/typography/opentype/spec/otff#organization-of-an-opentype-font
-        const OFFSET_TABLE_SIZE: usize = 12;
         if data.len() < OFFSET_TABLE_SIZE {
             return None;
         }
@@ -602,140 +582,107 @@ impl<'a> Font<'a> {
         s.advance(6); // searchRange (u16) + entrySelector (u16) + rangeShift (u16)
         let tables = s.read_array16::<raw::TableRecord>(num_tables)?;
 
-        let mut cbdt = None;
-        let mut cblc = None;
-        let mut cff_ = None;
-        let mut cff2 = None;
-        let mut gdef = None;
-        let mut gpos = None;
-        let mut gsub = None;
-        let mut hvar = None;
-        let mut gvar = None;
-        let mut mvar = None;
-        let mut os_2 = None;
-        let mut vorg = None;
-        let mut vvar = None;
-        let mut avar = None;
-        let mut cmap = None;
-        let mut fvar = None;
-        let mut glyf = None;
-        let mut head = None;
-        let mut hhea = None;
+        let mut font = Font {
+            avar: None,
+            cbdt: None,
+            cblc: None,
+            cff_: None,
+            cff2: None,
+            cmap: None,
+            fvar: None,
+            gdef: None,
+            glyf: None,
+            gpos: None,
+            gsub: None,
+            gvar: None,
+            head: &[],
+            hhea: &[],
+            hmtx: None,
+            hvar: None,
+            kern: None,
+            loca: None,
+            mvar: None,
+            name: None,
+            os_2: None,
+            post: None,
+            vhea: None,
+            vmtx: None,
+            sbix: None,
+            svg_: None,
+            vorg: None,
+            vvar: None,
+            number_of_glyphs: NonZeroU16::new(1).unwrap(), // dummy
+            coordinates: VarCoords::default(),
+        };
+
+        let mut number_of_glyphs = None;
         let mut hmtx = None;
-        let mut kern = None;
-        let mut loca = None;
-        let mut maxp = None;
-        let mut name = None;
-        let mut post = None;
-        let mut sbix = None;
-        let mut svg_ = None;
-        let mut vhea = None;
         let mut vmtx = None;
+        let mut loca = None;
+
         for table in tables {
             let offset = table.offset().to_usize();
             let length = usize::num_from(table.length());
             let range = offset..(offset + length);
 
-            // It's way faster to compare `[u8; 4]` with `&[u8]`
-            // rather than `&[u8]` with `&[u8]`.
             match &table.table_tag().to_bytes() {
-                b"CBDT" => cbdt = data.get(range),
-                b"CBLC" => cblc = data.get(range),
-                b"CFF " => cff_ = data.get(range).and_then(|data| cff::parse_metadata(data)),
-                b"CFF2" => cff2 = data.get(range).and_then(|data| cff2::parse_metadata(data)),
-                b"GDEF" => gdef = data.get(range).and_then(|data| gdef::Table::parse(data)),
-                b"GPOS" => gpos = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
-                b"GSUB" => gsub = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
-                b"HVAR" => hvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
-                b"MVAR" => mvar = data.get(range).and_then(|data| mvar::Table::parse(data)),
-                b"OS/2" => os_2 = data.get(range).and_then(|data| os2::Table::parse(data)),
-                b"SVG " => svg_ = data.get(range),
-                b"VORG" => vorg = data.get(range).and_then(|data| vorg::Table::parse(data)),
-                b"VVAR" => vvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
-                b"avar" => avar = data.get(range).and_then(|data| avar::Table::parse(data)),
-                b"cmap" => cmap = data.get(range).and_then(|data| cmap::Table::parse(data)),
-                b"fvar" => fvar = data.get(range).and_then(|data| fvar::Table::parse(data)),
-                b"glyf" => glyf = data.get(range),
-                b"gvar" => gvar = data.get(range).and_then(|data| gvar::Table::parse(data)),
-                b"head" => head = data.get(range).and_then(|data| raw::head::Table::parse(data)),
-                b"hhea" => hhea = data.get(range).and_then(|data| raw::hhea::Table::parse(data)),
+                b"CBDT" => font.cbdt = data.get(range),
+                b"CBLC" => font.cblc = data.get(range),
+                b"CFF " => font.cff_ = data.get(range).and_then(|data| cff::parse_metadata(data)),
+                b"CFF2" => font.cff2 = data.get(range).and_then(|data| cff2::parse_metadata(data)),
+                b"GDEF" => font.gdef = data.get(range).and_then(|data| gdef::Table::parse(data)),
+                b"GPOS" => font.gpos = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
+                b"GSUB" => font.gsub = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
+                b"HVAR" => font.hvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
+                b"MVAR" => font.mvar = data.get(range).and_then(|data| mvar::Table::parse(data)),
+                b"OS/2" => font.os_2 = data.get(range).and_then(|data| os2::Table::parse(data)),
+                b"SVG " => font.svg_ = data.get(range),
+                b"VORG" => font.vorg = data.get(range).and_then(|data| vorg::Table::parse(data)),
+                b"VVAR" => font.vvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
+                b"avar" => font.avar = data.get(range).and_then(|data| avar::Table::parse(data)),
+                b"cmap" => font.cmap = data.get(range).and_then(|data| cmap::Table::parse(data)),
+                b"fvar" => font.fvar = data.get(range).and_then(|data| fvar::Table::parse(data)),
+                b"glyf" => font.glyf = data.get(range),
+                b"gvar" => font.gvar = data.get(range).and_then(|data| gvar::Table::parse(data)),
+                b"head" => font.head = data.get(range).and_then(|data| head::parse(data))?,
+                b"hhea" => font.hhea = data.get(range).and_then(|data| hhea::parse(data))?,
                 b"hmtx" => hmtx = data.get(range),
-                b"kern" => kern = data.get(range),
+                b"kern" => font.kern = data.get(range),
                 b"loca" => loca = data.get(range),
-                b"maxp" => maxp = data.get(range).and_then(|data| maxp::parse(data)),
-                b"name" => name = data.get(range).and_then(|data| name::parse(data)),
-                b"post" => post = data.get(range).and_then(|data| post::Table::parse(data)),
-                b"sbix" => sbix = data.get(range),
-                b"vhea" => vhea = data.get(range).and_then(|data| raw::vhea::Table::parse(data)),
+                b"maxp" => number_of_glyphs = data.get(range).and_then(|data| maxp::parse(data)),
+                b"name" => font.name = data.get(range).and_then(|data| name::parse(data)),
+                b"post" => font.post = data.get(range).and_then(|data| post::Table::parse(data)),
+                b"sbix" => font.sbix = data.get(range),
+                b"vhea" => font.vhea = data.get(range).and_then(|data| vhea::parse(data)),
                 b"vmtx" => vmtx = data.get(range),
                 _ => {}
             }
         }
 
-        // Check for mandatory tables.
-        let head = head?;
-        let hhea = hhea?;
-        let maxp = maxp?;
-        let number_of_glyphs = maxp.number_of_glyphs;
-
-        let mut coordinates = VarCoords::default();
-        if let Some(ref fvar) = fvar {
-            coordinates.len = fvar.axes().count().min(MAX_VAR_COORDS as usize) as u8;
+        if font.head.is_empty() || font.hhea.is_empty() || number_of_glyphs.is_none() {
+            return None;
         }
 
-        let mut font = Font {
-            avar,
-            cbdt,
-            cblc,
-            cff_,
-            cff2,
-            cmap,
-            fvar,
-            gdef,
-            glyf,
-            gvar,
-            gpos,
-            gsub,
-            head,
-            hhea,
-            hmtx: None,
-            hvar,
-            kern,
-            loca: None,
-            mvar,
-            name,
-            os_2,
-            post,
-            vhea,
-            vmtx: None,
-            sbix,
-            svg_,
-            vorg,
-            vvar,
-            number_of_glyphs,
-            coordinates,
-        };
+        font.number_of_glyphs = number_of_glyphs?;
+
+        if let Some(ref fvar) = font.fvar {
+            font.coordinates.len = fvar.axes().count().min(MAX_VAR_COORDS as usize) as u8;
+        }
 
         if let Some(data) = hmtx {
-            if let Some(number_of_h_metrics) = font.hhea.number_of_h_metrics() {
+            if let Some(number_of_h_metrics) = hhea::number_of_h_metrics(font.hhea) {
                 font.hmtx = hmtx::Table::parse(data, number_of_h_metrics, font.number_of_glyphs);
             }
         }
 
         if let (Some(vhea), Some(data)) = (font.vhea, vmtx) {
-            if let Some(number_of_v_metrics) = vhea.num_of_long_ver_metrics() {
+            if let Some(number_of_v_metrics) = vhea::num_of_long_ver_metrics(vhea) {
                 font.vmtx = hmtx::Table::parse(data, number_of_v_metrics, font.number_of_glyphs);
             }
         }
 
         if let Some(data) = loca {
-            let format = match font.head.index_to_loc_format() {
-                0 => Some(IndexToLocationFormat::Short),
-                1 => Some(IndexToLocationFormat::Long),
-                _ => None,
-            };
-
-            if let Some(format) = format {
+            if let Some(format) = head::index_to_loc_format(font.head) {
                 font.loca = loca::Table::parse(data, font.number_of_glyphs, format);
             }
         }
@@ -899,10 +846,10 @@ impl<'a> Font<'a> {
     #[inline]
     pub fn ascender(&self) -> i16 {
         if let Some(os_2) = self.use_typo_metrics() {
-            let v = os_2.s_typo_ascender();
+            let v = os_2.typo_ascender();
             self.apply_metrics_variation(Tag::from_bytes(b"hasc"), v)
         } else {
-            self.hhea.ascender()
+            hhea::ascender(self.hhea)
         }
     }
 
@@ -912,10 +859,10 @@ impl<'a> Font<'a> {
     #[inline]
     pub fn descender(&self) -> i16 {
         if let Some(os_2) = self.use_typo_metrics() {
-            let v = os_2.s_typo_descender();
+            let v = os_2.typo_descender();
             self.apply_metrics_variation(Tag::from_bytes(b"hdsc"), v)
         } else {
-            self.hhea.descender()
+            hhea::descender(self.hhea)
         }
     }
 
@@ -933,10 +880,10 @@ impl<'a> Font<'a> {
     #[inline]
     pub fn line_gap(&self) -> i16 {
         if let Some(os_2) = self.use_typo_metrics() {
-            let v = os_2.s_typo_line_gap();
+            let v = os_2.typo_line_gap();
             self.apply_metrics_variation(Tag::from_bytes(b"hlgp"), v)
         } else {
-            self.hhea.line_gap()
+            hhea::line_gap(self.hhea)
         }
     }
 
@@ -947,7 +894,7 @@ impl<'a> Font<'a> {
     /// This method is affected by variation axes.
     #[inline]
     pub fn vertical_ascender(&self) -> Option<i16> {
-        self.vhea.map(|vhea| vhea.ascender())
+        self.vhea.map(vhea::ascender)
             .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"vasc"), v))
     }
 
@@ -956,7 +903,7 @@ impl<'a> Font<'a> {
     /// This method is affected by variation axes.
     #[inline]
     pub fn vertical_descender(&self) -> Option<i16> {
-        self.vhea.map(|vhea| vhea.descender())
+        self.vhea.map(vhea::descender)
             .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"vdsc"), v))
     }
 
@@ -973,7 +920,7 @@ impl<'a> Font<'a> {
     /// This method is affected by variation axes.
     #[inline]
     pub fn vertical_line_gap(&self) -> Option<i16> {
-        self.vhea.map(|vhea| vhea.line_gap())
+        self.vhea.map(vhea::line_gap)
             .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"vlgp"), v))
     }
 
@@ -982,12 +929,7 @@ impl<'a> Font<'a> {
     /// Returns `None` when value is not in a 16..=16384 range.
     #[inline]
     pub fn units_per_em(&self) -> Option<u16> {
-        let num = self.head.units_per_em();
-        if num >= 16 && num <= 16384 {
-            Some(num)
-        } else {
-            None
-        }
+        head::units_per_em(self.head)
     }
 
     /// Returns font's x height.
@@ -1387,7 +1329,6 @@ impl<'a> Font<'a> {
 
             self.coordinates.data[idx] = a.normalized_value(value);
         } else {
-            warn!("Font doesn't have a '{}' axis.", axis);
             return None;
         }
 
@@ -1421,7 +1362,7 @@ impl<'a> Font<'a> {
     fn apply_metrics_variation_to(&self, tag: Tag, value: &mut i16) {
         if self.is_variable() {
             let v = f32::from(*value) + self.metrics_var_offset(tag);
-            // TODO: Should probably round it, by f32::round is not available in core.
+            // TODO: Should probably round it, but f32::round is not available in core.
             if let Some(v) = i16::try_num_from(v) {
                 *value = v;
             }
@@ -1445,13 +1386,13 @@ impl fmt::Debug for Font<'_> {
 /// Returns `None` if a provided data is not a TrueType font collection.
 #[inline]
 pub fn fonts_in_collection(data: &[u8]) -> Option<u32> {
-    let table = raw::TTCHeader::new(data.get(0..raw::TTCHeader::SIZE)?);
-
-    if &table.ttc_tag().to_bytes() != b"ttcf" {
+    let mut s = Stream::new(data);
+    if &s.read::<Tag>()?.to_bytes() != b"ttcf" {
         return None;
     }
 
-    Some(table.num_fonts())
+    s.skip::<u32>(); // version
+    s.read()
 }
 
 

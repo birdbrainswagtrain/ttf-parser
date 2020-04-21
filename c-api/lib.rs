@@ -82,15 +82,32 @@ pub enum ttfp_image_format {
 /// can be set to 0.
 #[repr(C)]
 pub struct ttfp_glyph_image {
+    /// Horizontal offset.
     pub x: i16,
+
+    /// Vertical offset.
     pub y: i16,
+
+    /// Image width.
+    ///
+    /// It doesn't guarantee that this value is the same as set in the `data`.
     pub width: u16,
+
+    /// Image height.
+    ///
+    /// It doesn't guarantee that this value is the same as set in the `data`.
     pub height: u16,
 
+    /// A pixels per em of the selected strike.
+    pub pixels_per_em: u16,
+
+    /// An image format.
     pub format: ttfp_image_format,
 
     /// A raw image data as is. It's up to the caller to decode PNG, JPEG, etc.
     pub data: *const c_char,
+
+    /// A raw image data size.
     pub len: u32,
 }
 
@@ -101,25 +118,6 @@ fn font_from_ptr(font: *const ttfp_font) -> &'static ttf_parser::Font<'static> {
 fn font_from_mut_ptr(font: *const ttfp_font) -> &'static mut ttf_parser::Font<'static> {
     unsafe { &mut *(font as *mut ttf_parser::Font) }
 }
-
-/// @brief Initializes the library log.
-///
-/// Use it if you want to see any warnings.
-///
-/// Will do nothing when library is built without the `logging` feature.
-///
-/// All warnings will be printed to the `stderr`.
-#[cfg(feature = "logging")]
-#[no_mangle]
-pub extern "C" fn ttfp_init_log() {
-    if let Ok(()) = log::set_logger(&logging::LOGGER) {
-        log::set_max_level(log::LevelFilter::Warn);
-    }
-}
-
-#[cfg(not(feature = "logging"))]
-#[no_mangle]
-pub extern "C" fn ttfp_init_log() {}
 
 /// @brief Returns the number of fonts stored in a TrueType font collection.
 ///
@@ -727,6 +725,7 @@ pub extern "C" fn ttfp_get_glyph_image(
                     y: image.y.unwrap_or(0),
                     width: image.width.unwrap_or(0),
                     height: image.height.unwrap_or(0),
+                    pixels_per_em: image.pixels_per_em,
                     format: match image.format {
                         ttf_parser::ImageFormat::PNG => ttfp_image_format::PNG,
                         ttf_parser::ImageFormat::JPEG => ttfp_image_format::JPEG,
@@ -796,34 +795,6 @@ pub extern "C" fn ttfp_get_variation_axis_by_tag(
 #[no_mangle]
 pub extern "C" fn ttfp_set_variation(font: *mut ttfp_font, axis: Tag, value: f32) -> bool {
     font_from_mut_ptr(font).set_variation(axis, value).is_some()
-}
-
-#[cfg(feature = "logging")]
-mod logging {
-    pub static LOGGER: SimpleLogger = SimpleLogger;
-
-    pub struct SimpleLogger;
-
-    impl log::Log for SimpleLogger {
-        fn enabled(&self, metadata: &log::Metadata) -> bool {
-            metadata.level() <= log::LevelFilter::Warn
-        }
-
-        fn log(&self, record: &log::Record) {
-            if self.enabled(record.metadata()) {
-                let target = if record.target().len() > 0 {
-                    record.target()
-                } else {
-                    record.module_path().unwrap_or_default()
-                };
-
-                // ttf-parser will emit only warnings.
-                eprintln!("Warning: [{}] {}", target, record.args());
-            }
-        }
-
-        fn flush(&self) {}
-    }
 }
 
 #[cfg(test)]

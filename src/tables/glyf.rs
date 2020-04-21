@@ -432,7 +432,7 @@ impl<'a> CoordsIter<'a> {
         // See https://docs.microsoft.com/en-us/typography/opentype/spec/glyf#simple-glyph-description
         // for details about Simple Glyph Flags processing.
 
-        // We've already checked the coords data, so it's safe fallback to 0.
+        // We've already checked the coords data, so it's safe to fallback to 0.
 
         let mut n = 0;
         if is_short {
@@ -441,7 +441,7 @@ impl<'a> CoordsIter<'a> {
                 n = -n;
             }
         } else if !is_same_or_short {
-            n = self.stream.read().unwrap_or(0);
+            n = self.stream.read::<i16>().unwrap_or(0);
         }
 
         self.prev = self.prev.wrapping_add(n);
@@ -539,7 +539,6 @@ fn outline_impl(
     builder: &mut Builder,
 ) -> Option<Rect> {
     if depth >= MAX_COMPONENTS {
-        warn!("Recursion detected in the 'glyf' table.");
         return None;
     }
 
@@ -558,13 +557,13 @@ fn outline_impl(
 
         // u16 casting is safe, since we already checked that the value is positive.
         let number_of_contours = NonZeroU16::new(number_of_contours as u16)?;
-        for point in parse_simple_outline(s.tail(), number_of_contours)? {
+        for point in parse_simple_outline(s.tail()?, number_of_contours)? {
             builder.push_point(f32::from(point.x), f32::from(point.y),
                                point.on_curve_point, point.last_point);
         }
     } else if number_of_contours < 0 {
         // Composite glyph.
-        for comp in CompositeGlyphIter::new(s.tail()) {
+        for comp in CompositeGlyphIter::new(s.tail()?) {
             if let Some(range) = loca_table.glyph_range(comp.glyph_id) {
                 if let Some(glyph_data) = glyf_table.get(range) {
                     let transform = Transform::combine(builder.transform, comp.transform);
@@ -601,9 +600,9 @@ pub fn parse_simple_outline(
     let instructions_len: u16 = s.read()?;
     s.advance(usize::from(instructions_len));
 
-    let flags_offset = glyph_data.len() - s.left();
+    let flags_offset = s.offset();
     let (x_coords_len, y_coords_len) = resolve_coords_len(&mut s, points_total)?;
-    let x_coords_offset = glyph_data.len() - s.left();
+    let x_coords_offset = s.offset();
     let y_coords_offset = x_coords_offset + usize::num_from(x_coords_len);
     let y_coords_end = y_coords_offset + usize::num_from(y_coords_len);
 

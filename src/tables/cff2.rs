@@ -151,15 +151,7 @@ pub(crate) fn outline(
     builder: &mut dyn OutlineBuilder,
 ) -> Option<Rect> {
     let data = metadata.char_strings.get(glyph_id.0)?;
-    match parse_char_string(data, metadata, coordinates, builder) {
-        Ok(bbox) => Some(bbox),
-        Err(CFFError::ZeroBBox) => None,
-        #[allow(unused_variables)]
-        Err(e) => {
-            warn!("Glyph {} parsing failed cause {}.", glyph_id.0, e);
-            None
-        }
-    }
+    parse_char_string(data, metadata, coordinates, builder).ok()
 }
 
 #[derive(Clone, Copy, Default)]
@@ -1067,9 +1059,7 @@ impl<'a> DictionaryParser<'a> {
 
     #[inline(never)]
     fn parse_next(&mut self) -> Option<Operator> {
-        let mut s = Stream::new(self.data.get(self.offset..)?);
-        let left = s.left();
-
+        let mut s = Stream::new_at(self.data, self.offset)?;
         self.operands_offset = self.offset;
         while !s.at_end() {
             let b: u8 = s.read()?;
@@ -1083,7 +1073,7 @@ impl<'a> DictionaryParser<'a> {
                     operator = 1200 + u16::from(s.read::<u8>()?);
                 }
 
-                self.offset += left - s.left();
+                self.offset = s.offset();
                 return Some(Operator(operator));
             } else {
                 skip_number(b, &mut s)?;
