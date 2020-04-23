@@ -570,12 +570,6 @@ impl<'a> Stream<'a> {
     }
 }
 
-impl core::fmt::Debug for Stream<'_> {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "Stream({}..{})", self.offset, self.data.len())
-    }
-}
-
 
 pub trait Offset {
     fn to_usize(&self) -> usize;

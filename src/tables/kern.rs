@@ -148,7 +148,8 @@ impl core::fmt::Debug for Subtable<'_> {
 
 
 /// An iterator over kerning subtables.
-#[derive(Clone, Copy, Default, Debug)]
+#[allow(missing_debug_implementations)]
+#[derive(Clone, Copy, Default)]
 pub struct Subtables<'a> {
     /// Indicates an Apple Advanced Typography format.
     is_aat: bool,
@@ -180,7 +181,7 @@ impl<'a> Iterator for Subtables<'a> {
             let format: u8 = self.stream.read()?;
             self.stream.skip::<u16>(); // variation tuple index
 
-            if !matches!(format, 0..=3) {
+            if format > 3 {
                 // Unknown format.
                 return None;
             }
@@ -205,7 +206,7 @@ impl<'a> Iterator for Subtables<'a> {
             let format: u8 = self.stream.read()?;
             let coverage: OTCoverage = self.stream.read()?;
 
-            if !matches!(format, 0 | 2) {
+            if format != 0 && format != 2 {
                 // Unknown format.
                 return None;
             }
