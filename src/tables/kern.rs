@@ -2,7 +2,7 @@
 // https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6kern.html
 
 use crate::GlyphId;
-use crate::parser::{Stream, FromData, NumFrom, Offset16, Offset};
+use crate::parser::{Stream, FromData, NumFrom, Offset16, Offset, LazyArray16};
 use crate::raw::kern::*;
 
 
@@ -43,7 +43,6 @@ impl FromData for AATCoverage {
 pub struct Subtable<'a> {
     is_horizontal: bool,
     is_variable: bool,
-    has_state_machine: bool,
     has_cross_stream: bool,
     format: u8,
     header_size: u8,
@@ -64,13 +63,13 @@ impl<'a> Subtable<'a> {
     }
 
     #[inline]
-    pub fn has_state_machine(&self) -> bool {
-        self.has_state_machine
+    pub fn has_cross_stream(&self) -> bool {
+        self.has_cross_stream
     }
 
     #[inline]
-    pub fn has_cross_stream(&self) -> bool {
-        self.has_cross_stream
+    pub fn has_state_machine(&self) -> bool {
+        self.format == 1
     }
 
     #[inline]
@@ -82,15 +81,24 @@ impl<'a> Subtable<'a> {
             _ => None,
         }
     }
+
+    #[inline]
+    pub fn state_machine(&self) -> Option<state_machine::Machine> {
+        if !self.has_state_machine() {
+            return None;
+        }
+
+        state_machine::Machine::parse(self.data)
+    }
 }
 
 impl core::fmt::Debug for Subtable<'_> {
     fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
         // TODO: finish_non_exhaustive
         f.debug_struct("Subtable")
-            .field("is_horizontal", &self.is_horizontal)
-            .field("has_state_machine", &self.has_state_machine)
-            .field("has_cross_stream", &self.has_cross_stream)
+            .field("is_horizontal", &self.is_horizontal())
+            .field("has_state_machine", &self.has_state_machine())
+            .field("has_cross_stream", &self.has_cross_stream())
             .field("format", &self.format)
             .finish()
     }
@@ -140,7 +148,6 @@ impl<'a> Iterator for Subtables<'a> {
             Some(Subtable {
                 is_horizontal: coverage.is_horizontal(),
                 is_variable: coverage.is_variable(),
-                has_state_machine: format == 1,
                 has_cross_stream: coverage.has_cross_stream(),
                 format,
                 header_size: HEADER_SIZE,
@@ -166,7 +173,6 @@ impl<'a> Iterator for Subtables<'a> {
             Some(Subtable {
                 is_horizontal: coverage.is_horizontal(),
                 is_variable: false, // Only AAT supports it.
-                has_state_machine: false, // Only AAT supports it.
                 has_cross_stream: coverage.has_cross_stream(),
                 format,
                 header_size: HEADER_SIZE,
@@ -287,4 +293,149 @@ fn parse_format3(data: &[u8], left: GlyphId, right: GlyphId) -> Option<i16> {
     let index = u16::from(left_class) * u16::from(right_hand_classes_count) + u16::from(right_class);
     let index = indices.get(index)?;
     kerning_values.get(u16::from(index))
+}
+
+/// A *Format 1 Kerning Subtable (State Table for Contextual Kerning)* implementation
+/// from https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6kern.html
+pub mod state_machine {
+    use super::*;
+
+    #[derive(Clone, Copy, PartialEq, Debug)]
+    pub enum State {
+        StartOfText = 0,
+        StartOfLine = 1,
+    }
+
+    #[derive(Clone, Copy, PartialEq, Debug)]
+    pub enum Class {
+        EndOfText = 0,
+        OutOfBounds = 1,
+        DeletedGlyph = 2,
+        EndOfLine = 3,
+        Letter = 4,
+        Space = 5,
+        Punctuation = 6,
+    }
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct ActionOffset(pub u16);
+
+    #[derive(Clone, Copy, Debug)]
+    pub struct Entry {
+        new_state: u16,
+        flags: u16, // TODO: to type
+    }
+
+    impl Entry {
+        pub fn new_state(&self) -> u16 {
+            self.new_state
+        }
+
+        pub fn has_action(&self) -> bool {
+            self.flags & 0x3FFF != 0
+        }
+
+        pub fn action_offset(&self) -> ActionOffset {
+            ActionOffset(self.flags & 0x3FFF)
+        }
+
+        pub fn has_push(&self) -> bool {
+            self.flags & 0x8000 != 0
+        }
+
+        pub fn has_advance(&self) -> bool {
+            self.flags & 0x4000 == 0
+        }
+    }
+
+    impl FromData for Entry {
+        #[inline]
+        fn parse(data: &[u8]) -> Option<Self> {
+            let mut s = Stream::new(data);
+            Some(Entry {
+                new_state: s.read()?,
+                flags: s.read()?,
+            })
+        }
+    }
+
+    pub struct Machine<'a> {
+        number_of_classes: u16,
+        first_glyph: GlyphId,
+        class_table: LazyArray16<'a, u8>,
+        state_array_offset: u16,
+        state_array: &'a [u8],
+        entry_table: &'a [u8],
+        actions: &'a [u8],
+    }
+
+    impl<'a> Machine<'a> {
+        pub(crate) fn parse(data: &'a [u8]) -> Option<Self> {
+            let mut s = Stream::new(data);
+
+            let number_of_classes: u16 = s.read::<u16>()?;
+            // Note that in format1 subtable, offsets are not from the subtable start,
+            // but from subtable start + `header_size`.
+            // So there is not need to subtract the `header_size`.
+            let class_table_offset = s.read::<Offset16>()?.to_usize();
+            let state_array_offset = s.read::<Offset16>()?.to_usize();
+            let entry_table_offset = s.read::<Offset16>()?.to_usize();
+            // Ignore values_offset since we don't use it.
+
+            // Parse class subtable.
+            let mut s = Stream::new_at(data, class_table_offset)?;
+            let first_glyph: GlyphId = s.read()?;
+            let number_of_glyphs: u16 = s.read()?;
+            let class_table = s.read_array16::<u8>(number_of_glyphs)?;
+
+            Some(Machine {
+                number_of_classes,
+                first_glyph,
+                class_table,
+                state_array_offset: state_array_offset as u16,
+                state_array: data.get(state_array_offset..)?,
+                entry_table: data.get(entry_table_offset..)?,
+                actions: data,
+            })
+        }
+
+        pub fn class(&self, glyph_id: GlyphId) -> Option<u8> {
+            if glyph_id.0 == 0xFFFF {
+                return Some(Class::DeletedGlyph as u8);
+            }
+
+            let idx = glyph_id.0.checked_sub(self.first_glyph.0)?;
+            self.class_table.get(idx)
+        }
+
+        pub fn entry(&self, state: u16, mut class: u8) -> Option<Entry> {
+            if u16::from(class) >= self.number_of_classes {
+                class = Class::OutOfBounds as u8;
+            }
+
+            let entry_idx = self.state_array.get(
+                state as usize * usize::from(self.number_of_classes) + usize::from(class)
+            )?;
+
+            Stream::read_at(self.entry_table, usize::from(*entry_idx) * Entry::SIZE)
+        }
+
+        pub fn kerning(&self, offset: ActionOffset) -> Option<i16> {
+            Stream::read_at(self.actions, usize::from(offset.0))
+        }
+
+        pub fn new_state(&self, state: u16) -> u16 {
+            let n = (i32::from(state) - i32::from(self.state_array_offset))
+                        / i32::from(self.number_of_classes);
+
+            use core::convert::TryFrom;
+            u16::try_from(n).unwrap_or(0)
+        }
+    }
+
+    impl core::fmt::Debug for Machine<'_> {
+        fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
+            f.write_str("Machine(...)")
+        }
+    }
 }
