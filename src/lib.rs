@@ -59,6 +59,15 @@ macro_rules! try_opt_or {
     };
 }
 
+macro_rules! matches {
+    ($expression:expr, $( $pattern:pat )|+ $( if $guard: expr )?) => {
+        match $expression {
+            $( $pattern )|+ $( if $guard )? => true,
+            _ => false
+        }
+    }
+}
+
 mod ggg;
 mod parser;
 mod raw;
