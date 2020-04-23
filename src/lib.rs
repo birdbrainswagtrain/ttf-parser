@@ -1048,8 +1048,11 @@ impl<'a> Font<'a> {
         let mut advance = self.hmtx?.advance(glyph_id)? as f32;
 
         if self.is_variable() {
-            // We can't use `round()` in `no_std`, so this is the next best thing.
-            advance += hvar::glyph_advance_offset(self.hvar?, glyph_id, self.coords())? + 0.5;
+            // Ignore variation offset when `hvar` is not set.
+            if let Some(hvar_data) = self.hvar {
+                // We can't use `round()` in `no_std`, so this is the next best thing.
+                advance += hvar::glyph_advance_offset(hvar_data, glyph_id, self.coords())? + 0.5;
+            }
         }
 
         u16::try_num_from(advance)
@@ -1063,7 +1066,11 @@ impl<'a> Font<'a> {
         let mut advance = self.vmtx?.advance(glyph_id)? as f32;
 
         if self.is_variable() {
-            advance += hvar::glyph_advance_offset(self.vvar?, glyph_id, self.coords())? + 0.5;
+            // Ignore variation offset when `vvar` is not set.
+            if let Some(vvar_data) = self.vvar {
+                // We can't use `round()` in `no_std`, so this is the next best thing.
+                advance += hvar::glyph_advance_offset(vvar_data, glyph_id, self.coords())? + 0.5;
+            }
         }
 
         u16::try_num_from(advance)
@@ -1077,7 +1084,11 @@ impl<'a> Font<'a> {
         let mut bearing = self.hmtx?.side_bearing(glyph_id)? as f32;
 
         if self.is_variable() {
-            bearing += hvar::glyph_side_bearing_offset(self.hvar?, glyph_id, self.coords())? + 0.5;
+            // Ignore variation offset when `hvar` is not set.
+            if let Some(hvar_data) = self.hvar {
+                // We can't use `round()` in `no_std`, so this is the next best thing.
+                bearing += hvar::glyph_side_bearing_offset(hvar_data, glyph_id, self.coords())? + 0.5;
+            }
         }
 
         i16::try_num_from(bearing)
@@ -1091,7 +1102,11 @@ impl<'a> Font<'a> {
         let mut bearing = self.vmtx?.side_bearing(glyph_id)? as f32;
 
         if self.is_variable() {
-            bearing += hvar::glyph_side_bearing_offset(self.vvar?, glyph_id, self.coords())? + 0.5;
+            // Ignore variation offset when `vvar` is not set.
+            if let Some(vvar_data) = self.vvar {
+                // We can't use `round()` in `no_std`, so this is the next best thing.
+                bearing += hvar::glyph_side_bearing_offset(vvar_data, glyph_id, self.coords())? + 0.5;
+            }
         }
 
         i16::try_num_from(bearing)
