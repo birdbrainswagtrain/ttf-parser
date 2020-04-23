@@ -36,7 +36,7 @@ By doing so we can simplify an API quite a lot since otherwise, we will have to 
 
 #![no_std]
 #![forbid(unsafe_code)]
-// #![warn(missing_docs)]
+#![warn(missing_docs)]
 #![warn(missing_copy_implementations)]
 #![warn(missing_debug_implementations)]
 
@@ -1192,7 +1192,7 @@ impl<'a> Font<'a> {
     /// [OpenType](https://docs.microsoft.com/en-us/typography/opentype/spec/kern)
     /// and
     /// [Apple Advanced Typography](https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6kern.html)
-    /// formats.
+    /// variants.
     pub fn kerning_subtables(&self) -> kern::Subtables {
         self.kern.unwrap_or_default()
     }
