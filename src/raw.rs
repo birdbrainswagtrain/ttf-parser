@@ -463,40 +463,6 @@ pub mod kern {
     use crate::parser::FromData;
 
     #[derive(Clone, Copy)]
-    pub struct Coverage {
-        data: [u8; 2],
-    }
-
-    impl Coverage {
-        pub const SIZE: usize = 2;
-
-        #[inline(always)]
-        pub fn new(input: &[u8]) -> Option<Self> {
-            use core::convert::TryInto;
-            input.try_into().ok().map(|data| Coverage { data })
-        }
-
-        #[inline(always)]
-        pub fn coverage(&self) -> u8 {
-            self.data[0]
-        }
-
-        #[inline(always)]
-        pub fn format(&self) -> u8 {
-            self.data[1]
-        }
-    }
-
-    impl FromData for Coverage {
-        const SIZE: usize = Coverage::SIZE;
-
-        #[inline]
-        fn parse(data: &[u8]) -> Option<Self> {
-            Self::new(data)
-        }
-    }
-
-    #[derive(Clone, Copy)]
     pub struct KerningRecord {
         data: [u8; 6],
     }
@@ -617,7 +583,6 @@ pub mod gsubgpos {
     }
 
     impl Record {
-        #[allow(dead_code)]
         pub const SIZE: usize = 6;
 
         #[inline(always)]
@@ -657,7 +622,6 @@ pub mod gsubgpos {
     }
 
     impl Condition {
-        #[allow(dead_code)]
         pub const SIZE: usize = 8;
 
         #[inline(always)]
@@ -702,7 +666,6 @@ pub mod gsubgpos {
     }
 
     impl FeatureVariationRecord {
-        #[allow(dead_code)]
         pub const SIZE: usize = 8;
 
         #[inline(always)]

@@ -36,7 +36,7 @@ By doing so we can simplify an API quite a lot since otherwise, we will have to 
 
 #![no_std]
 #![forbid(unsafe_code)]
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![warn(missing_copy_implementations)]
 #![warn(missing_debug_implementations)]
 
@@ -78,6 +78,7 @@ pub use gpos::PositioningTable;
 pub use gsub::SubstitutionTable;
 pub use name::*;
 pub use os2::*;
+pub use tables::kern;
 
 
 /// A type-safe wrapper for glyph ID.
@@ -518,7 +519,7 @@ pub struct Font<'a> {
     hhea: &'a [u8],
     hmtx: Option<hmtx::Table<'a>>,
     hvar: Option<hvar::Table<'a>>,
-    kern: Option<&'a [u8]>,
+    kern: Option<kern::Subtables<'a>>,
     loca: Option<loca::Table<'a>>,
     mvar: Option<mvar::Table<'a>>,
     name: Option<name::Names<'a>>,
@@ -647,7 +648,7 @@ impl<'a> Font<'a> {
                 b"head" => font.head = data.get(range).and_then(|data| head::parse(data))?,
                 b"hhea" => font.hhea = data.get(range).and_then(|data| hhea::parse(data))?,
                 b"hmtx" => hmtx = data.get(range),
-                b"kern" => font.kern = data.get(range),
+                b"kern" => font.kern = data.get(range).and_then(|data| kern::parse(data)),
                 b"loca" => loca = data.get(range),
                 b"maxp" => number_of_glyphs = data.get(range).and_then(|data| maxp::parse(data)),
                 b"name" => font.name = data.get(range).and_then(|data| name::parse(data)),
@@ -1161,11 +1162,15 @@ impl<'a> Font<'a> {
         self.gsub.map(|table| SubstitutionTable { table })
     }
 
-    /// Returns a glyphs pair kerning.
+    /// Returns a iterator over kerning subtables.
     ///
-    /// Only a horizontal kerning is supported.
-    pub fn glyphs_kerning(&self, glyph_id1: GlyphId, glyph_id2: GlyphId) -> Option<i16> {
-        kern::glyphs_kerning(self.kern?, glyph_id1, glyph_id2)
+    /// Supports both
+    /// [OpenType](https://docs.microsoft.com/en-us/typography/opentype/spec/kern)
+    /// and
+    /// [Apple Advanced Typography](https://developer.apple.com/fonts/TrueType-Reference-Manual/RM06/Chap6kern.html)
+    /// formats.
+    pub fn kerning_subtables(&self) -> kern::Subtables {
+        self.kern.unwrap_or_default()
     }
 
     /// Outlines a glyph and returns its tight bounding box.
@@ -1345,6 +1350,12 @@ impl<'a> Font<'a> {
     #[inline]
     pub fn variation_coordinates(&self) -> &[NormalizedCoord] {
         self.coordinates.as_slice()
+    }
+
+    /// Returns current normalized variation coordinates.
+    #[inline]
+    pub fn has_non_default_variation_coords(&self) -> bool {
+        self.coordinates.as_slice().iter().any(|c| c.0 != 0)
     }
 
     #[inline]

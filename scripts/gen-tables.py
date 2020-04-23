@@ -332,13 +332,6 @@ NAME_RECORD_TABLE = [
 ]
 
 # https://docs.microsoft.com/en-us/typography/opentype/spec/kern
-# In the kern table, coverage is stored as uint16, but we are using two uint8 to simply the code.
-KERN_COVERAGE = [
-    TableRow(TtfUInt8(),    'coverage'),
-    TableRow(TtfUInt8(),    'format'),
-]
-
-# https://docs.microsoft.com/en-us/typography/opentype/spec/kern
 # In the kern table, a kerning pair is stored as two uint16, but we are using one uint32
 # so we can use binary search.
 KERNING_RECORD = [
@@ -491,22 +484,22 @@ VARIATION_STORE_REGION_AXIS_COORDINATES_RECORD = [
 ]
 
 GSUB_GPOS_RECORD = [
-    TableRow(True,  TtfTag(),       'tag'),
-    TableRow(True,  TtfOffset16(),  'offset'),
+    TableRow(TtfTag(),       'tag'),
+    TableRow(TtfOffset16(),  'offset'),
 ]
 
 # https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#condition-table-format-1-font-variation-axis-range
 GSUB_GPOS_CONDITION_TABLE = [
-    TableRow(True,  TtfUInt16(),    'format'),
-    TableRow(True,  TtfUInt16(),    'axisIndex'),
-    TableRow(True,  TtfInt16(),     'filterRangeMinValue'),  # Use i16 instead of F2DOT14 to simplify calculations.
-    TableRow(True,  TtfInt16(),     'filterRangeMaxValue'),  #
+    TableRow(TtfUInt16(),    'format'),
+    TableRow(TtfUInt16(),    'axisIndex'),
+    TableRow(TtfInt16(),     'filterRangeMinValue'),  # Use i16 instead of F2DOT14 to simplify calculations.
+    TableRow(TtfInt16(),     'filterRangeMaxValue'),  #
 ]
 
 # https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#featurevariations-table
 GSUB_GPOS_FEATURE_VARIATION_RECORD = [
-    TableRow(True,  TtfOffset32(),  'conditionSetOffset'),
-    TableRow(True,  TtfOffset32(),  'featureTableSubstitutionOffset'),
+    TableRow(TtfOffset32(),  'conditionSetOffset'),
+    TableRow(TtfOffset32(),  'featureTableSubstitutionOffset'),
 ]
 
 # https://docs.microsoft.com/en-us/typography/opentype/spec/svg#svg-document-list
@@ -701,8 +694,6 @@ print()
 print('pub mod kern {')
 print('use crate::parser::FromData;')
 print()
-generate_table(KERN_COVERAGE, 'Coverage')
-print()
 generate_table(KERNING_RECORD, 'KerningRecord')
 print('}')
 print()
@@ -720,11 +711,11 @@ print('pub mod gsubgpos {')
 print('use crate::Tag;')
 print('use crate::parser::{Offset16, Offset32, FromData};')
 print()
-generate_table(GSUB_GPOS_RECORD, 'Record', owned=True, impl_from_data=True)
+generate_table(GSUB_GPOS_RECORD, 'Record')
 print()
-generate_table(GSUB_GPOS_CONDITION_TABLE, 'Condition', owned=True, impl_from_data=True)
+generate_table(GSUB_GPOS_CONDITION_TABLE, 'Condition')
 print()
-generate_table(GSUB_GPOS_FEATURE_VARIATION_RECORD, 'FeatureVariationRecord', owned=True, impl_from_data=True)
+generate_table(GSUB_GPOS_FEATURE_VARIATION_RECORD, 'FeatureVariationRecord')
 print('}')
 print()
 print('pub mod avar {')

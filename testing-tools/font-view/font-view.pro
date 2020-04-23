@@ -32,12 +32,12 @@ contains(DEFINES, WITH_FREETYPE) {
     PKGCONFIG += freetype2
 }
 
-# qmake DEFINES+=WITH_HARFBUZZ HARFBUZZ_SRC=/path/to/harfbuzz-master/
+# qmake DEFINES+=WITH_HARFBUZZ HARFBUZZ_SRC=/path/to/harfbuzz>=2.6.5/
 contains(DEFINES, WITH_HARFBUZZ) {
     SOURCES += harfbuzzfont.cpp
     HEADERS += harfbuzzfont.h
 
-    # harfbuzz should be built with cmake
-    LIBS += -L$$HARFBUZZ_SRC/build -lharfbuzz
+    # harfbuzz should be built with autotools
+    LIBS += -L$$HARFBUZZ_SRC/src/.libs/ -lharfbuzz
     INCLUDEPATH += $$HARFBUZZ_SRC/src
 }
