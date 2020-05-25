@@ -1154,11 +1154,16 @@ impl<'a> Font<'a> {
     ///
     /// `set_index` allows checking a specific glyph coverage set.
     /// Otherwise all sets will be checked.
-    ///
-    /// Returns `Ok(false)` when *Mark Glyph Sets Table* is not set.
     #[inline]
     pub fn is_mark_glyph(&self, glyph_id: GlyphId, set_index: Option<u16>) -> bool {
         try_opt_or!(self.gdef, false).is_mark_glyph(glyph_id, set_index)
+    }
+
+    // TODO: fix bad name
+    /// Returns a GDEF variation delta at a specified index.
+    #[inline]
+    pub fn gdef_variation_delta(&self, outer_index: u16, inner_index: u16) -> Option<f32> {
+        self.gdef.and_then(|gdef| gdef.variation_delta(outer_index, inner_index, self.coordinates.as_slice()))
     }
 
     /// Returns a reference to a [Glyph Positioning Table](https://docs.microsoft.com/en-us/typography/opentype/spec/gpos).
