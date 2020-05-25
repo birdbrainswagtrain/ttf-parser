@@ -9,7 +9,7 @@ variants.
 
 Since there is no single correct way to process a kerning data,
 we have to provide an access to kerning subtables, so a caller can implement
-a kerning algorithm themselves.
+a kerning algorithm manually.
 But we still try to keep the API as high-level as possible.
 */
 
@@ -211,8 +211,16 @@ impl<'a> Iterator for Subtables<'a> {
                 return None;
             }
 
-            // Subtract the header size.
-            let data_len = usize::from(table_len).checked_sub(usize::from(HEADER_SIZE))?;
+            let data_len = if self.number_of_tables == 1 {
+                // An OpenType `kern` table with just one subtable is a special case.
+                // The `table_len` property is mainly required to jump to the next subtable,
+                // but if there is only one subtable, this property can be ignored.
+                // This is abused by some fonts, to get around the `u16` size limit.
+                self.stream.tail()?.len()
+            } else {
+                // Subtract the header size.
+                usize::from(table_len).checked_sub(usize::from(HEADER_SIZE))?
+            };
 
             Some(Subtable {
                 is_horizontal: coverage.is_horizontal(),

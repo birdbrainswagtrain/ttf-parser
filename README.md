@@ -17,7 +17,7 @@ Can be used as Rust and as C library.
 - Zero heap allocations.
 - Zero unsafe.
 - Zero dependencies.
-- `no_std` compatible.
+- `no_std`/WASM compatible.
 - Fast. See the *Performance* section.
 - Stateless. No mutable parsing methods.
 - Simple and maintainable code (no magic numbers).
@@ -56,7 +56,7 @@ There are roughly three types of TrueType tables:
 | `bloc` table      |                        | ✓                   |                                |
 | `CBDT` table      | ✓                      | ✓                   |                                |
 | `CBLC` table      | ✓                      | ✓                   |                                |
-| `CFF `&nbsp;table | ✓                      | ✓                   | ✓                              |
+| `CFF `&nbsp;table | ~<sup>3</sup>          | ✓                   | ~<sup>3</sup>                  |
 | `CFF2` table      | ✓                      | ✓                   |                                |
 | `cmap` table      | ~ (no 8; Unicode-only) | ✓                   | ~ (no 2,8,10,14; Unicode-only) |
 | `EBDT` table      |                        | ✓                   |                                |
@@ -64,7 +64,7 @@ There are roughly three types of TrueType tables:
 | `fvar` table      | ✓                      | ✓                   |                                |
 | `gasp` table      |                        | ✓                   |                                |
 | `GDEF` table      | ~                      |                     |                                |
-| `glyf` table      | ✓                      | ✓                   | ✓                              |
+| `glyf` table      | ~<sup>4</sup>          | ✓                   | ~<sup>4</sup>                  |
 | `GPOS` table      |                        |                     | ~ (only 2)                     |
 | `GSUB` table      |                        |                     |                                |
 | `gvar` table      | ✓                      | ✓                   |                                |
@@ -78,16 +78,16 @@ There are roughly three types of TrueType tables:
 | `name` table      | ✓                      | ✓                   |                                |
 | `OS/2` table      | ✓                      | ✓                   |                                |
 | `post` table      | ✓                      | ✓                   |                                |
-| `sbix` table      | ✓                      | ✓                   |                                |
+| `sbix` table      | ~ (PNG only)           | ~ (PNG only)        |                                |
 | `SVG `&nbsp;table | ✓                      |                     | ✓                              |
 | `vhea` table      | ✓                      | ✓                   |                                |
 | `vmtx` table      | ✓                      | ✓                   |                                |
 | `VORG` table      | ✓                      | ✓                   |                                |
 | `VVAR` table      | ✓                      | ✓                   |                                |
 | Language          | Rust + C API           | C                   | C                              |
-| Dynamic lib size  | ~300KiB                | ~760KiB<sup>3</sup> | ? (header-only)                |
-| Tested version    | 0.5.0                  | 2.9.1               | 1.24                           |
-| License           | MIT / Apache-2.0       | FTL/GPLv2           | public domain                  |
+| Dynamic lib size  | ~300KiB                | ~760KiB<sup>5</sup> | ? (header-only)                |
+| Tested version    | 0.6.0                  | 2.9.1               | 1.24                           |
+| License           | MIT / Apache-2.0       | FTL / GPLv2         | public domain                  |
 
 Legend:
 
@@ -99,7 +99,9 @@ Notes:
 
 1. `stb_truetype` outline parsing method is reentrant.
 2. Very primitive.
-3. Depends on build flags.
+3. Matching points are not supported.
+4. `type2` only. `seac` is not supported.
+5. Depends on build flags.
 
 ### Performance
 
@@ -114,10 +116,10 @@ The [benchmark](./benches/outline/) tests how long it takes to outline all glyph
 
 | Table/Library | ttf-parser     | FreeType   | stb_truetype   |
 | ------------- | -------------: | ---------: | -------------: |
-| `glyf`        |   `0.786 ms`   | `1.194 ms` | **`0.695 ms`** |
-| `gvar`        | **`3.119 ms`** | `3.594 ms` |              - |
-| `CFF`         | **`1.237 ms`** | `5.806 ms` |   `2.862 ms`   |
-| `CFF2`        | **`1.893 ms`** | `6.782 ms` |              - |
+| `glyf`        |   `0.827 ms`   | `1.194 ms` | **`0.695 ms`** |
+| `gvar`        | **`3.252 ms`** | `3.594 ms` |              - |
+| `CFF`         | **`1.209 ms`** | `5.946 ms` |   `2.862 ms`   |
+| `CFF2`        | **`1.921 ms`** | `7.001 ms` |              - |
 
 **Note:** FreeType is surprisingly slow, so I'm worried that I've messed something up.
 

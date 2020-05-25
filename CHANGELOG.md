@@ -5,19 +5,36 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+
+## [0.6.1] - 2020-05-19
+### Fixed
+- (`kern`) Support fonts that ignore the subtable size limit.
+
+## [0.6.0] - 2020-05-18
 ### Added
 - `sbix`, `CBLC`, `CBDT` and `SVG` tables support.
-- `Font::glyph_image`.
+- `Font::glyph_raster_image` and `Font::glyph_svg_image`.
 - `Font::kerning_subtables` with subtable formats 0..3 support.
 
+### Changed
+- (c-api) The library doesn't allocate `ttfp_font` anymore. All allocations should be
+  handled by the caller from now.
+
 ### Removed
-- Logging support. We haven't used it anyway.
 - `Font::glyphs_kerning`. Use `Font::kerning_subtables` instead.
+- (c-api) `ttfp_create_font` and `ttfp_destroy_font`.
+  Use `ttfp_font_size_of` + `ttfp_font_init` instead.
+  ```c
+  ttfp_font *font = (ttfp_font*)alloca(ttfp_font_size_of());
+  ttfp_font_init(font_data, font_data_size, 0, font);
+  ```
+- Logging support. We haven't used it anyway.
 
 ### Fixed
 - (`gvar`) Integer overflow.
 - (`cmap`) Integer overflow during subtable format 2 parsing.
-- `Font::glyph_*_advance` will return `None` when glyph ID 
+- (`CFF`, `CFF2`) DICT number parsing.
+- `Font::glyph_*_advance` will return `None` when glyph ID
   is larger than the number of metrics in the table.
 - Ignore variation offset in `Font::glyph_*_advance` and `Font::glyph_*_side_bearing`
   when `HVAR`/`VVAR` tables are missing.
@@ -105,7 +122,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Removed
 - `GDEF` table parsing.
 
-[Unreleased]: https://github.com/RazrFalcon/ttf-parser/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/RazrFalcon/ttf-parser/compare/v0.6.1...HEAD
+[0.6.1]: https://github.com/RazrFalcon/ttf-parser/compare/v0.6.0...v0.6.1
+[0.6.0]: https://github.com/RazrFalcon/ttf-parser/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/RazrFalcon/ttf-parser/compare/v0.4.0...v0.5.0
 [0.4.0]: https://github.com/RazrFalcon/ttf-parser/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/RazrFalcon/ttf-parser/compare/v0.2.2...v0.3.0
