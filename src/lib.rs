@@ -61,7 +61,6 @@ macro_rules! try_opt_or {
 
 mod ggg;
 mod parser;
-mod raw;
 mod tables;
 mod var_store;
 
@@ -69,7 +68,7 @@ mod var_store;
 mod writer;
 
 use tables::*;
-use parser::{Stream, FromData, Offset, NumFrom, TryNumFrom, i16_bound, f32_bound};
+use parser::{Stream, FromData, NumFrom, TryNumFrom, i16_bound, f32_bound};
 use head::IndexToLocationFormat;
 pub use fvar::{VariationAxes, VariationAxis};
 pub use gdef::GlyphClass;
@@ -87,6 +86,8 @@ pub use tables::kern;
 pub struct GlyphId(pub u16);
 
 impl FromData for GlyphId {
+    const SIZE: usize = 2;
+
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         u16::parse(data).map(GlyphId)
@@ -267,6 +268,8 @@ impl core::fmt::Display for Tag {
 }
 
 impl FromData for Tag {
+    const SIZE: usize = 4;
+
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         u32::parse(data).map(Tag)
@@ -472,6 +475,31 @@ pub enum TableName {
 }
 
 
+#[derive(Clone, Copy)]
+struct TableRecord {
+    table_tag: Tag,
+    #[allow(dead_code)]
+    check_sum: u32,
+    offset: u32,
+    length: u32,
+}
+
+impl FromData for TableRecord {
+    const SIZE: usize = 16;
+
+    #[inline]
+    fn parse(data: &[u8]) -> Option<Self> {
+        let mut s = Stream::new(data);
+        Some(TableRecord {
+            table_tag: s.read()?,
+            check_sum: s.read()?,
+            offset: s.read()?,
+            length: s.read()?,
+        })
+    }
+}
+
+
 const MAX_VAR_COORDS: u8 = 32;
 
 #[derive(Clone, Default)]
@@ -575,7 +603,7 @@ impl<'a> Font<'a> {
 
         let num_tables: u16 = s.read()?;
         s.advance(6); // searchRange (u16) + entrySelector (u16) + rangeShift (u16)
-        let tables = s.read_array16::<raw::TableRecord>(num_tables)?;
+        let tables = s.read_array16::<TableRecord>(num_tables)?;
 
         let mut font = Font {
             avar: None,
@@ -616,11 +644,11 @@ impl<'a> Font<'a> {
         let mut loca = None;
 
         for table in tables {
-            let offset = table.offset().to_usize();
-            let length = usize::num_from(table.length());
+            let offset = usize::num_from(table.offset);
+            let length = usize::num_from(table.length);
             let range = offset..(offset + length);
 
-            match &table.table_tag().to_bytes() {
+            match &table.table_tag.to_bytes() {
                 b"CBDT" => font.cbdt = data.get(range),
                 b"CBLC" => font.cblc = data.get(range),
                 b"CFF " => font.cff_ = data.get(range).and_then(|data| cff::parse_metadata(data)),

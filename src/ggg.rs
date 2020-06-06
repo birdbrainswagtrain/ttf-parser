@@ -6,7 +6,6 @@ use core::convert::TryFrom;
 
 use crate::{GlyphId, Tag, NormalizedCoord};
 use crate::parser::*;
-use crate::raw::gsubgpos::{Record, Condition, FeatureVariationRecord};
 
 
 #[derive(Clone, Copy, Default)]
@@ -165,6 +164,8 @@ pub struct LanguageIndex(pub u16);
 pub struct FeatureIndex(pub u16);
 
 impl FromData for FeatureIndex {
+    const SIZE: usize = 2;
+
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         u16::parse(data).map(FeatureIndex)
@@ -182,9 +183,31 @@ pub struct FeatureVariationIndex(pub u32);
 pub struct LookupIndex(pub u16);
 
 impl FromData for LookupIndex {
+    const SIZE: usize = 2;
+
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         u16::parse(data).map(LookupIndex)
+    }
+}
+
+
+#[derive(Clone, Copy)]
+struct Record {
+    tag: Tag,
+    offset: Offset16,
+}
+
+impl FromData for Record {
+    const SIZE: usize = 6;
+
+    #[inline]
+    fn parse(data: &[u8]) -> Option<Self> {
+        let mut s = Stream::new(data);
+        Some(Record {
+            tag: s.read()?,
+            offset: s.read()?,
+        })
     }
 }
 
@@ -212,14 +235,14 @@ impl<'a> Iterator for Scripts<'a> {
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
         let record = self.records.get(u16::try_from(n).ok()?)?;
-        let data = self.data.get(record.offset().to_usize()..)?;
+        let data = self.data.get(record.offset.to_usize()..)?;
         let mut s = Stream::new(data);
         let default_lang: Option<Offset16> = s.read()?;
         let count: u16 = s.read()?;
         let records = s.read_array16(count)?;
         Some(Script {
             data,
-            script: record.tag(),
+            script: record.tag,
             default_lang_offset: default_lang,
             records,
         })
@@ -274,7 +297,7 @@ impl<'a> Script<'a> {
     ///
     /// Uses binary search and not an iterator internally.
     pub fn language_by_tag(&self, tag: Tag) -> Option<(LanguageIndex, Language)> {
-        let (idx, _) = self.records.binary_search_by(|r| r.tag().cmp(&tag))?;
+        let (idx, _) = self.records.binary_search_by(|r| r.tag.cmp(&tag))?;
         let lang = self.language_at(LanguageIndex(idx))?;
         Some((LanguageIndex(idx), lang))
     }
@@ -304,8 +327,8 @@ impl<'a> Iterator for Languages<'a> {
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
         let record = self.records.get(u16::try_from(n).ok()?)?;
-        let data = self.data.get(record.offset().to_usize()..)?;
-        parse_lang_sys_table(data, Some(record.tag()))
+        let data = self.data.get(record.offset.to_usize()..)?;
+        parse_lang_sys_table(data, Some(record.tag))
     }
 }
 
@@ -361,12 +384,12 @@ impl<'a> Iterator for Features<'a> {
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
         let record = self.records.get(u16::try_from(n).ok()?)?;
-        let data = self.data.get(record.offset().to_usize()..)?;
+        let data = self.data.get(record.offset.to_usize()..)?;
         let mut s = Stream::new(data);
         s.skip::<Offset16>(); // featureParams
         let count: u16 = s.read()?;
         Some(Feature {
-            tag: record.tag(),
+            tag: record.tag,
             lookup_indices: s.read_array16(count)?,
         })
     }
@@ -406,7 +429,7 @@ impl<'a> Iterator for Lookups<'a> {
 
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
         let record = self.records.get(u16::try_from(n).ok()?)?;
-        let data = self.data.get(record.offset().to_usize()..)?;
+        let data = self.data.get(record.offset.to_usize()..)?;
         let mut s = Stream::new(data);
         let lookup_type: u16 = s.read()?;
         let lookup_flag: u16 = s.read()?;
@@ -431,6 +454,26 @@ pub struct Lookup<'a> {
     lookup_flag: u16,
     offsets: Offsets16<'a, Offset16>,
     mark_filtering_set: u16, // TODO: optional
+}
+
+
+#[derive(Clone, Copy)]
+struct FeatureVariationRecord {
+    condition_set_offset: Offset32,
+    feature_table_substitution_offset: Offset32,
+}
+
+impl FromData for FeatureVariationRecord {
+    const SIZE: usize = 8;
+
+    #[inline]
+    fn parse(data: &[u8]) -> Option<Self> {
+        let mut s = Stream::new(data);
+        Some(FeatureVariationRecord {
+            condition_set_offset: s.read()?,
+            feature_table_substitution_offset: s.read()?,
+        })
+    }
 }
 
 
@@ -459,8 +502,8 @@ impl<'a> Iterator for FeatureVariations<'a> {
         let record = self.records.get(u32::try_from(n).ok()?)?;
         Some(FeatureVariation {
             data: self.data,
-            condition_set_offset: record.condition_set_offset(),
-            feature_table_substitution_offset: record.feature_table_substitution_offset(),
+            condition_set_offset: record.condition_set_offset,
+            feature_table_substitution_offset: record.feature_table_substitution_offset,
         })
     }
 }
@@ -537,7 +580,7 @@ impl<'a> Iterator for ConditionSet<'a> {
     fn nth(&mut self, n: usize) -> Option<Self::Item> {
         let offset = self.offsets.get(u16::try_from(n).ok()?)?;
         let condition: Condition = Stream::read_at(self.data, offset.to_usize())?;
-        if condition.format() != 1 {
+        if condition.format != 1 {
             return None;
         }
 
@@ -546,10 +589,33 @@ impl<'a> Iterator for ConditionSet<'a> {
 }
 
 
+#[derive(Clone, Copy)]
+struct Condition {
+    format: u16,
+    axis_index: u16,
+    filter_range_min_value: i16,
+    filter_range_max_value: i16,
+}
+
 impl Condition {
     fn evaluate(&self, coordinates: &[NormalizedCoord]) -> bool {
-        let coord = coordinates.get(usize::from(self.axis_index())).cloned().unwrap_or_default();
-        self.filter_range_min_value() <= coord.get() && coord.get() <= self.filter_range_max_value()
+        let coord = coordinates.get(usize::from(self.axis_index)).cloned().unwrap_or_default();
+        self.filter_range_min_value <= coord.get() && coord.get() <= self.filter_range_max_value
+    }
+}
+
+impl FromData for Condition {
+    const SIZE: usize = 8;
+
+    #[inline]
+    fn parse(data: &[u8]) -> Option<Self> {
+        let mut s = Stream::new(data);
+        Some(Condition {
+            format: s.read()?,
+            axis_index: s.read()?,
+            filter_range_min_value: s.read()?,
+            filter_range_max_value: s.read()?,
+        })
     }
 }
 
@@ -631,6 +697,34 @@ impl<'a> FeatureSubstitution<'a> {
 }
 
 
+#[derive(Clone, Copy)]
+struct RangeRecord {
+    start_glyph_id: GlyphId,
+    end_glyph_id: GlyphId,
+    value: u16,
+}
+
+impl RangeRecord {
+    fn range(&self) -> core::ops::RangeInclusive<GlyphId> {
+        self.start_glyph_id..=self.end_glyph_id
+    }
+}
+
+impl FromData for RangeRecord {
+    const SIZE: usize = 6;
+
+    #[inline]
+    fn parse(data: &[u8]) -> Option<Self> {
+        let mut s = Stream::new(data);
+        Some(RangeRecord {
+            start_glyph_id: s.read()?,
+            end_glyph_id: s.read()?,
+            value: s.read()?,
+        })
+    }
+}
+
+
 /// A [Coverage Table](https://docs.microsoft.com/en-us/typography/opentype/spec/chapter2#coverage-table).
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct CoverageTable<'a> {
@@ -654,7 +748,7 @@ impl<'a> CoverageTable<'a> {
             }
             2 => {
                 let count = try_opt_or!(s.read::<u16>(), false);
-                let records = try_opt_or!(s.read_array16::<crate::raw::gdef::RangeRecord>(count), false);
+                let records = try_opt_or!(s.read_array16::<RangeRecord>(count), false);
                 records.into_iter().any(|r| r.range().contains(&glyph_id))
             }
             _ => false,
@@ -669,6 +763,9 @@ impl<'a> CoverageTable<'a> {
 pub struct Class(pub u16);
 
 impl FromData for Class {
+    const SIZE: usize = 2;
+
+    #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         u16::parse(data).map(Class)
     }
@@ -709,9 +806,9 @@ impl<'a> ClassDefinitionTable<'a> {
             }
             2 => {
                 let count: u16 = s.read()?;
-                let records = s.read_array16::<crate::raw::gdef::ClassRangeRecord>(count)?;
+                let records = s.read_array16::<RangeRecord>(count)?;
                 records.into_iter().find(|r| r.range().contains(&glyph_id))
-                    .map(|record| Class(record.class()))
+                    .map(|record| Class(record.value))
             }
             _ => None,
         }
