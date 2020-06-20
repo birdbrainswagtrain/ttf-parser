@@ -36,7 +36,7 @@ By doing so we can simplify an API quite a lot since otherwise, we will have to 
 
 #![no_std]
 #![forbid(unsafe_code)]
-#![warn(missing_docs)]
+// #![warn(missing_docs)]
 #![warn(missing_copy_implementations)]
 #![warn(missing_debug_implementations)]
 
@@ -60,7 +60,7 @@ macro_rules! try_opt_or {
 }
 
 mod ggg;
-mod parser;
+pub mod parser;
 mod tables;
 mod var_store;
 
@@ -68,7 +68,7 @@ mod var_store;
 mod writer;
 
 use tables::*;
-use parser::{Stream, FromData, NumFrom, TryNumFrom, i16_bound, f32_bound};
+use parser::{Stream, LazyArray16, FromData, NumFrom, TryNumFrom, i16_bound, f32_bound};
 use head::IndexToLocationFormat;
 pub use fvar::{VariationAxes, VariationAxis};
 pub use gdef::GlyphClass;
@@ -525,6 +525,8 @@ impl VarCoords {
 /// A font data handle.
 #[derive(Clone)]
 pub struct Font<'a> {
+    font_data: &'a [u8],
+    table_records: LazyArray16<'a, TableRecord>,
     avar: Option<avar::Table<'a>>,
     cbdt: Option<&'a [u8]>,
     cblc: Option<&'a [u8]>,
@@ -606,6 +608,8 @@ impl<'a> Font<'a> {
         let tables = s.read_array16::<TableRecord>(num_tables)?;
 
         let mut font = Font {
+            font_data: data,
+            table_records: tables,
             avar: None,
             cbdt: None,
             cblc: None,
@@ -749,6 +753,15 @@ impl<'a> Font<'a> {
             TableName::VerticalOrigin               => self.vorg.is_some(),
             TableName::WindowsMetrics               => self.os_2.is_some(),
         }
+    }
+
+    /// Returns a raw data of a selected table.
+    pub fn table_data(&self, tag: Tag) -> Option<&'a [u8]> {
+        let (_, table) = self.table_records.binary_search_by(|record| record.table_tag.cmp(&tag))?;
+        let offset = usize::num_from(table.offset);
+        let length = usize::num_from(table.length);
+        let range = offset..(offset + length);
+        self.font_data.get(range)
     }
 
     /// Returns an iterator over [Name Records].

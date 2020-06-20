@@ -483,6 +483,7 @@ impl<'a, T: FromData> Iterator for LazyArrayIter32<'a, T> {
 }
 
 
+#[allow(missing_debug_implementations)]
 #[derive(Clone, Copy, Default)]
 pub struct Stream<'a> {
     data: &'a [u8],
@@ -677,6 +678,7 @@ impl<'a, T: Offset + FromData + Copy + core::fmt::Debug> core::fmt::Debug for Of
 }
 
 
+#[allow(missing_debug_implementations)]
 pub struct OffsetsIter16<'a, T: Offset + FromData> {
     offsets: Offsets16<'a, T>,
     index: u16,
