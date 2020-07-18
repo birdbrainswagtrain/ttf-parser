@@ -32,7 +32,7 @@ contains(DEFINES, WITH_FREETYPE) {
     PKGCONFIG += freetype2
 }
 
-# qmake DEFINES+=WITH_HARFBUZZ HARFBUZZ_SRC=/path/to/harfbuzz>=2.6.5/
+# qmake DEFINES+=WITH_HARFBUZZ HARFBUZZ_SRC=/path/to/harfbuzz-master/
 contains(DEFINES, WITH_HARFBUZZ) {
     DEFINES += HB_EXPERIMENTAL_API
 

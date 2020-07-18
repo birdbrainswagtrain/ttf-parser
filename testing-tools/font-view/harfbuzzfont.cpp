@@ -1,7 +1,6 @@
 #include <QTransform>
 #include <QDebug>
 
-#define HB_EXPERIMENTAL_API
 #include <hb.h>
 
 #include "harfbuzzfont.h"
