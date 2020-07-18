@@ -34,10 +34,12 @@ contains(DEFINES, WITH_FREETYPE) {
 
 # qmake DEFINES+=WITH_HARFBUZZ HARFBUZZ_SRC=/path/to/harfbuzz>=2.6.5/
 contains(DEFINES, WITH_HARFBUZZ) {
+    DEFINES += HB_EXPERIMENTAL_API
+
     SOURCES += harfbuzzfont.cpp
     HEADERS += harfbuzzfont.h
 
-    # harfbuzz should be built with autotools
-    LIBS += -L$$HARFBUZZ_SRC/src/.libs/ -lharfbuzz
+    # harfbuzz should be built with meson
+    LIBS += -L$$HARFBUZZ_SRC/builddir/src/ -lharfbuzz
     INCLUDEPATH += $$HARFBUZZ_SRC/src
 }

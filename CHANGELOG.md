@@ -5,6 +5,38 @@ The format is based on [Keep a Changelog](http://keepachangelog.com/)
 and this project adheres to [Semantic Versioning](http://semver.org/).
 
 ## [Unreleased]
+### Added
+- `FaceParsingError`
+
+### Changed
+- (CFF,CFF2) 10% faster parsing.
+- `Face::from_slice` returns `Result` now.
+
+## [0.7.0] - 2020-07-16
+### Added
+- (CFF) CID fonts support.
+- (CFF) `seac` support.
+- `Font::global_bounding_box`
+
+### Changed
+- Rename `Font` to `Face`, because this is what it actually is.
+- Rename `Font::from_data` to `Font::from_slice` to match serde and other libraries.
+- Rename `Name::name_utf8` to `Name::to_string`.
+
+### Removed
+- `Font::family_name` and `Font::post_script_name`. They were a bit confusing.
+  Prefer:
+  ```
+  face.names().find(|name| name.name_id() == name_id::FULL_NAME).and_then(|name| name.to_string())
+  ```
+
+## [0.6.2] - 2020-07-02
+### Added
+- `Name::is_unicode`
+- `Font::family_name` will load names with Windows Symbol encoding now.
+
+### Fixed
+- `Font::glyph_bounding_box` will apply variation in case of `gvar` fonts.
 
 ## [0.6.1] - 2020-05-19
 ### Fixed
@@ -121,7 +153,9 @@ and this project adheres to [Semantic Versioning](http://semver.org/).
 ### Removed
 - `GDEF` table parsing.
 
-[Unreleased]: https://github.com/RazrFalcon/ttf-parser/compare/v0.6.1...HEAD
+[Unreleased]: https://github.com/RazrFalcon/ttf-parser/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/RazrFalcon/ttf-parser/compare/v0.6.2...v0.7.0
+[0.6.2]: https://github.com/RazrFalcon/ttf-parser/compare/v0.6.1...v0.6.2
 [0.6.1]: https://github.com/RazrFalcon/ttf-parser/compare/v0.6.0...v0.6.1
 [0.6.0]: https://github.com/RazrFalcon/ttf-parser/compare/v0.5.0...v0.6.0
 [0.5.0]: https://github.com/RazrFalcon/ttf-parser/compare/v0.4.0...v0.5.0

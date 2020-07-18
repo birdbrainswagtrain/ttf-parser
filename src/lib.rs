@@ -22,17 +22,9 @@ A high-level, safe, zero-allocation TrueType font parser.
 - Technically, should use less than 64KiB of stack in worst case scenario.
 - Most of arithmetic operations are checked.
 - Most of numeric casts are checked.
-
-## Error handling
-
-`ttf-parser` is designed to parse well-formed fonts, so it does not have an `Error` enum.
-It doesn't mean that it will crash or panic on malformed fonts, only that the
-error handling will boil down to `Option::None`. So you will not get a detailed cause of an error.
-By doing so we can simplify an API quite a lot since otherwise, we will have to use
-`Result<Option<T>, Error>`.
 */
 
-#![doc(html_root_url = "https://docs.rs/ttf-parser/0.6.1")]
+#![doc(html_root_url = "https://docs.rs/ttf-parser/0.7.0")]
 
 #![no_std]
 #![forbid(unsafe_code)]
@@ -43,9 +35,6 @@ By doing so we can simplify an API quite a lot since otherwise, we will have to 
 #[cfg(feature = "std")]
 #[macro_use]
 extern crate std;
-
-#[cfg(feature = "std")]
-use std::string::String;
 
 use core::fmt;
 use core::num::NonZeroU16;
@@ -68,7 +57,8 @@ mod var_store;
 mod writer;
 
 use tables::*;
-use parser::{Stream, LazyArray16, FromData, NumFrom, TryNumFrom, i16_bound, f32_bound};
+use parser::{Stream, FromData, NumFrom, TryNumFrom, LazyArray16, LazyArray32, Offset32, Offset};
+use parser::{i16_bound, f32_bound};
 use head::IndexToLocationFormat;
 pub use fvar::{VariationAxes, VariationAxis};
 pub use gdef::GlyphClass;
@@ -91,6 +81,31 @@ impl FromData for GlyphId {
     #[inline]
     fn parse(data: &[u8]) -> Option<Self> {
         u16::parse(data).map(GlyphId)
+    }
+}
+
+
+/// A TrueType font magic.
+///
+/// https://docs.microsoft.com/en-us/typography/opentype/spec/otff#organization-of-an-opentype-font
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum Magic {
+    TrueType,
+    OpenType,
+    FontCollection,
+}
+
+impl FromData for Magic {
+    const SIZE: usize = 4;
+
+    #[inline]
+    fn parse(data: &[u8]) -> Option<Self> {
+        match u32::parse(data)? {
+            0x00010000 => Some(Magic::TrueType),
+            0x4F54544F => Some(Magic::OpenType),
+            0x74746366 => Some(Magic::FontCollection),
+            _ => None,
+        }
     }
 }
 
@@ -522,15 +537,56 @@ impl VarCoords {
 }
 
 
-/// A font data handle.
+/// A list of font face parsing errors.
+#[derive(Clone, Copy, PartialEq, Debug)]
+pub enum FaceParsingError {
+    /// An attempt to read out of bounds detected.
+    ///
+    /// Should occur only on malformed fonts.
+    MalformedFont,
+
+    /// Face data must start with `0x00010000`, `0x4F54544F` or `0x74746366`.
+    UnknownMagic,
+
+    /// The face index is larger than the number of faces in the font.
+    FaceIndexOutOfBounds,
+
+    /// The `head` table is missing or malformed.
+    NoHeadTable,
+
+    /// The `hhea` table is missing or malformed.
+    NoHheaTable,
+
+    /// The `maxp` table is missing or malformed.
+    NoMaxpTable,
+}
+
+impl core::fmt::Display for FaceParsingError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            FaceParsingError::MalformedFont => write!(f, "malformed font"),
+            FaceParsingError::UnknownMagic => write!(f, "unknown magic"),
+            FaceParsingError::FaceIndexOutOfBounds => write!(f, "face index is out of bounds"),
+            FaceParsingError::NoHeadTable => write!(f, "the head table is missing or malformed"),
+            FaceParsingError::NoHheaTable => write!(f, "the hhea table is missing or malformed"),
+            FaceParsingError::NoMaxpTable => write!(f, "the maxp table is missing or malformed"),
+        }
+    }
+}
+
+#[cfg(feature = "std")]
+impl std::error::Error for FaceParsingError {}
+
+
+/// A font face handle.
 #[derive(Clone)]
-pub struct Font<'a> {
+pub struct Face<'a> {
     font_data: &'a [u8],
     table_records: LazyArray16<'a, TableRecord>,
     avar: Option<avar::Table<'a>>,
     cbdt: Option<&'a [u8]>,
     cblc: Option<&'a [u8]>,
-    cff_: Option<cff::Metadata<'a>>,
+    cff1: Option<cff1::Metadata<'a>>,
     cff2: Option<cff2::Metadata<'a>>,
     cmap: Option<cmap::Table<'a>>,
     fvar: Option<fvar::Table<'a>>,
@@ -559,61 +615,59 @@ pub struct Font<'a> {
     coordinates: VarCoords,
 }
 
-impl<'a> Font<'a> {
-    /// Creates a `Font` object from a raw data.
+impl<'a> Face<'a> {
+    /// Creates a new `Face` object from a raw data.
     ///
-    /// You can set `index` for font collections.
-    /// For simple `ttf` fonts set `index` to 0.
+    /// `index` indicates the specific font face in a font collection.
+    /// Use `fonts_in_collection` to get the total number of font faces.
+    /// Set to 0 if unsure.
     ///
     /// This method will do some parsing and sanitization, so it's a bit expensive.
     ///
     /// Required tables: `head`, `hhea` and `maxp`.
     ///
     /// If an optional table has an invalid data it will be skipped.
-    pub fn from_data(data: &'a [u8], index: u32) -> Option<Self> {
-        const OFFSET_TABLE_SIZE: usize = 12;
+    pub fn from_slice(data: &'a [u8], index: u32) -> Result<Self, FaceParsingError> {
+        // https://docs.microsoft.com/en-us/typography/opentype/spec/otff#organization-of-an-opentype-font
 
-        let table_data = if let Some(n) = fonts_in_collection(data) {
-            if index < n {
-                // https://docs.microsoft.com/en-us/typography/opentype/spec/otff#ttc-header
-                const OFFSET_32_SIZE: usize = 4;
-                let offset = OFFSET_TABLE_SIZE + OFFSET_32_SIZE * usize::num_from(index);
-                let font_offset: u32 = Stream::read_at(data, offset)?;
-                data.get(usize::num_from(font_offset) .. data.len())?
-            } else {
-                return None;
+        let mut s = Stream::new(data);
+
+        // Read **font** magic.
+        let magic: Magic = s.read().ok_or(FaceParsingError::UnknownMagic)?;
+        if magic == Magic::FontCollection {
+            s.skip::<u32>(); // version
+            let number_of_faces: u32 = s.read().ok_or(FaceParsingError::MalformedFont)?;
+            let offsets: LazyArray32<Offset32> = s.read_array32(number_of_faces)
+                .ok_or(FaceParsingError::MalformedFont)?;
+
+            let face_offset = offsets.get(index).ok_or(FaceParsingError::FaceIndexOutOfBounds)?;
+            // Face offset is from the start of the font data,
+            // so we have to adjust it to the current parser offset.
+            let face_offset = face_offset.to_usize().checked_sub(s.offset())
+                .ok_or(FaceParsingError::MalformedFont)?;
+            s.advance_checked(face_offset).ok_or(FaceParsingError::MalformedFont)?;
+
+            // Read **face** magic.
+            // Each face in a font collection also starts with a magic.
+            let magic: Magic = s.read().ok_or(FaceParsingError::UnknownMagic)?;
+            // And face in a font collection can't be another collection.
+            if magic == Magic::FontCollection {
+                return Err(FaceParsingError::UnknownMagic);
             }
-        } else {
-            data
-        };
-
-        // https://docs.microsoft.com/en-us/typography/opentype/spec/otff#organization-of-an-opentype-font
-        if data.len() < OFFSET_TABLE_SIZE {
-            return None;
         }
 
-        // https://docs.microsoft.com/en-us/typography/opentype/spec/otff#organization-of-an-opentype-font
-        const SFNT_VERSION_TRUE_TYPE: u32 = 0x00010000;
-        const SFNT_VERSION_OPEN_TYPE: u32 = 0x4F54544F;
-
-        let mut s = Stream::new(table_data);
-
-        let sfnt_version: u32 = s.read()?;
-        if sfnt_version != SFNT_VERSION_TRUE_TYPE && sfnt_version != SFNT_VERSION_OPEN_TYPE {
-            return None;
-        }
-
-        let num_tables: u16 = s.read()?;
+        let num_tables: u16 = s.read().ok_or(FaceParsingError::MalformedFont)?;
         s.advance(6); // searchRange (u16) + entrySelector (u16) + rangeShift (u16)
-        let tables = s.read_array16::<TableRecord>(num_tables)?;
+        let tables = s.read_array16::<TableRecord>(num_tables)
+            .ok_or(FaceParsingError::MalformedFont)?;
 
-        let mut font = Font {
+        let mut face = Face {
             font_data: data,
             table_records: tables,
             avar: None,
             cbdt: None,
             cblc: None,
-            cff_: None,
+            cff1: None,
             cff2: None,
             cmap: None,
             fvar: None,
@@ -653,71 +707,78 @@ impl<'a> Font<'a> {
             let range = offset..(offset + length);
 
             match &table.table_tag.to_bytes() {
-                b"CBDT" => font.cbdt = data.get(range),
-                b"CBLC" => font.cblc = data.get(range),
-                b"CFF " => font.cff_ = data.get(range).and_then(|data| cff::parse_metadata(data)),
-                b"CFF2" => font.cff2 = data.get(range).and_then(|data| cff2::parse_metadata(data)),
-                b"GDEF" => font.gdef = data.get(range).and_then(|data| gdef::Table::parse(data)),
-                b"GPOS" => font.gpos = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
-                b"GSUB" => font.gsub = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
-                b"HVAR" => font.hvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
-                b"MVAR" => font.mvar = data.get(range).and_then(|data| mvar::Table::parse(data)),
-                b"OS/2" => font.os_2 = data.get(range).and_then(|data| os2::Table::parse(data)),
-                b"SVG " => font.svg_ = data.get(range),
-                b"VORG" => font.vorg = data.get(range).and_then(|data| vorg::Table::parse(data)),
-                b"VVAR" => font.vvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
-                b"avar" => font.avar = data.get(range).and_then(|data| avar::Table::parse(data)),
-                b"cmap" => font.cmap = data.get(range).and_then(|data| cmap::Table::parse(data)),
-                b"fvar" => font.fvar = data.get(range).and_then(|data| fvar::Table::parse(data)),
-                b"glyf" => font.glyf = data.get(range),
-                b"gvar" => font.gvar = data.get(range).and_then(|data| gvar::Table::parse(data)),
-                b"head" => font.head = data.get(range).and_then(|data| head::parse(data))?,
-                b"hhea" => font.hhea = data.get(range).and_then(|data| hhea::parse(data))?,
+                b"CBDT" => face.cbdt = data.get(range),
+                b"CBLC" => face.cblc = data.get(range),
+                b"CFF " => face.cff1 = data.get(range).and_then(|data| cff1::parse_metadata(data)),
+                b"CFF2" => face.cff2 = data.get(range).and_then(|data| cff2::parse_metadata(data)),
+                b"GDEF" => face.gdef = data.get(range).and_then(|data| gdef::Table::parse(data)),
+                b"GPOS" => face.gpos = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
+                b"GSUB" => face.gsub = data.get(range).and_then(|data| ggg::GsubGposTable::parse(data)),
+                b"HVAR" => face.hvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
+                b"MVAR" => face.mvar = data.get(range).and_then(|data| mvar::Table::parse(data)),
+                b"OS/2" => face.os_2 = data.get(range).and_then(|data| os2::Table::parse(data)),
+                b"SVG " => face.svg_ = data.get(range),
+                b"VORG" => face.vorg = data.get(range).and_then(|data| vorg::Table::parse(data)),
+                b"VVAR" => face.vvar = data.get(range).and_then(|data| hvar::Table::parse(data)),
+                b"avar" => face.avar = data.get(range).and_then(|data| avar::Table::parse(data)),
+                b"cmap" => face.cmap = data.get(range).and_then(|data| cmap::Table::parse(data)),
+                b"fvar" => face.fvar = data.get(range).and_then(|data| fvar::Table::parse(data)),
+                b"glyf" => face.glyf = data.get(range),
+                b"gvar" => face.gvar = data.get(range).and_then(|data| gvar::Table::parse(data)),
+                b"head" => face.head = data.get(range).and_then(|data| head::parse(data)).unwrap_or_default(),
+                b"hhea" => face.hhea = data.get(range).and_then(|data| hhea::parse(data)).unwrap_or_default(),
                 b"hmtx" => hmtx = data.get(range),
-                b"kern" => font.kern = data.get(range).and_then(|data| kern::parse(data)),
+                b"kern" => face.kern = data.get(range).and_then(|data| kern::parse(data)),
                 b"loca" => loca = data.get(range),
                 b"maxp" => number_of_glyphs = data.get(range).and_then(|data| maxp::parse(data)),
-                b"name" => font.name = data.get(range).and_then(|data| name::parse(data)),
-                b"post" => font.post = data.get(range).and_then(|data| post::Table::parse(data)),
-                b"sbix" => font.sbix = data.get(range),
-                b"vhea" => font.vhea = data.get(range).and_then(|data| vhea::parse(data)),
+                b"name" => face.name = data.get(range).and_then(|data| name::parse(data)),
+                b"post" => face.post = data.get(range).and_then(|data| post::Table::parse(data)),
+                b"sbix" => face.sbix = data.get(range),
+                b"vhea" => face.vhea = data.get(range).and_then(|data| vhea::parse(data)),
                 b"vmtx" => vmtx = data.get(range),
                 _ => {}
             }
         }
 
-        if font.head.is_empty() || font.hhea.is_empty() || number_of_glyphs.is_none() {
-            return None;
+        if face.head.is_empty() {
+            return Err(FaceParsingError::NoHeadTable);
         }
 
-        font.number_of_glyphs = number_of_glyphs?;
+        if face.hhea.is_empty() {
+            return Err(FaceParsingError::NoHheaTable);
+        }
 
-        if let Some(ref fvar) = font.fvar {
-            font.coordinates.len = fvar.axes().count().min(MAX_VAR_COORDS as usize) as u8;
+        face.number_of_glyphs = match number_of_glyphs {
+            Some(n) => n,
+            None => return Err(FaceParsingError::NoMaxpTable),
+        };
+
+        if let Some(ref fvar) = face.fvar {
+            face.coordinates.len = fvar.axes().count().min(MAX_VAR_COORDS as usize) as u8;
         }
 
         if let Some(data) = hmtx {
-            if let Some(number_of_h_metrics) = hhea::number_of_h_metrics(font.hhea) {
-                font.hmtx = hmtx::Table::parse(data, number_of_h_metrics, font.number_of_glyphs);
+            if let Some(number_of_h_metrics) = hhea::number_of_h_metrics(face.hhea) {
+                face.hmtx = hmtx::Table::parse(data, number_of_h_metrics, face.number_of_glyphs);
             }
         }
 
-        if let (Some(vhea), Some(data)) = (font.vhea, vmtx) {
+        if let (Some(vhea), Some(data)) = (face.vhea, vmtx) {
             if let Some(number_of_v_metrics) = vhea::num_of_long_ver_metrics(vhea) {
-                font.vmtx = hmtx::Table::parse(data, number_of_v_metrics, font.number_of_glyphs);
+                face.vmtx = hmtx::Table::parse(data, number_of_v_metrics, face.number_of_glyphs);
             }
         }
 
         if let Some(data) = loca {
-            if let Some(format) = head::index_to_loc_format(font.head) {
-                font.loca = loca::Table::parse(data, font.number_of_glyphs, format);
+            if let Some(format) = head::index_to_loc_format(face.head) {
+                face.loca = loca::Table::parse(data, face.number_of_glyphs, format);
             }
         }
 
-        Some(font)
+        Ok(face)
     }
 
-    /// Checks that font has a specified table.
+    /// Checks that face has a specified table.
     ///
     /// Will return `true` only for tables that were successfully parsed.
     #[inline]
@@ -730,7 +791,7 @@ impl<'a> Font<'a> {
             TableName::CharacterToGlyphIndexMapping => self.cmap.is_some(),
             TableName::ColorBitmapData              => self.cbdt.is_some(),
             TableName::ColorBitmapLocation          => self.cblc.is_some(),
-            TableName::CompactFontFormat            => self.cff_.is_some(),
+            TableName::CompactFontFormat            => self.cff1.is_some(),
             TableName::CompactFontFormat2           => self.cff2.is_some(),
             TableName::FontVariations               => self.fvar.is_some(),
             TableName::GlyphData                    => self.glyf.is_some(),
@@ -774,47 +835,7 @@ impl<'a> Font<'a> {
         self.name.unwrap_or_default()
     }
 
-    /// Returns font's family name.
-    ///
-    /// *Typographic Family* is preferred over *Family*.
-    ///
-    /// Note that font can have multiple names. You can use [`names()`] to list them all.
-    ///
-    /// [`names()`]: #method.names
-    #[cfg(feature = "std")]
-    #[inline]
-    pub fn family_name(&self) -> Option<String> {
-        let mut idx = None;
-        let mut iter = self.names();
-        for (i, name) in iter.enumerate() {
-            if name.name_id() == name_id::TYPOGRAPHIC_FAMILY && name.is_unicode() {
-                // Break the loop as soon as we reached 'Typographic Family'.
-                idx = Some(i);
-                break;
-            } else if name.name_id() == name_id::FAMILY && name.is_unicode() {
-                idx = Some(i);
-                // Do not break the loop since 'Typographic Family' can be set later
-                // and it has a higher priority.
-            }
-        }
-
-        iter.nth(idx?).and_then(|name| name.name_from_utf16_be())
-    }
-
-    /// Returns font's PostScript name.
-    ///
-    /// Note that font can have multiple names. You can use [`names()`] to list them all.
-    ///
-    /// [`names()`]: #method.names
-    #[cfg(feature = "std")]
-    #[inline]
-    pub fn post_script_name(&self) -> Option<String> {
-        self.names()
-            .find(|name| name.name_id() == name_id::POST_SCRIPT_NAME && name.is_unicode())
-            .and_then(|name| name.name_from_utf16_be())
-    }
-
-    /// Checks that font is marked as *Regular*.
+    /// Checks that face is marked as *Regular*.
     ///
     /// Returns `false` when OS/2 table is not present.
     #[inline]
@@ -822,7 +843,7 @@ impl<'a> Font<'a> {
         try_opt_or!(self.os_2, false).is_regular()
     }
 
-    /// Checks that font is marked as *Italic*.
+    /// Checks that face is marked as *Italic*.
     ///
     /// Returns `false` when OS/2 table is not present.
     #[inline]
@@ -830,7 +851,7 @@ impl<'a> Font<'a> {
         try_opt_or!(self.os_2, false).is_italic()
     }
 
-    /// Checks that font is marked as *Bold*.
+    /// Checks that face is marked as *Bold*.
     ///
     /// Returns `false` when OS/2 table is not present.
     #[inline]
@@ -838,7 +859,7 @@ impl<'a> Font<'a> {
         try_opt_or!(self.os_2, false).is_bold()
     }
 
-    /// Checks that font is marked as *Oblique*.
+    /// Checks that face is marked as *Oblique*.
     ///
     /// Returns `false` when OS/2 table is not present or when its version is < 4.
     #[inline]
@@ -846,7 +867,7 @@ impl<'a> Font<'a> {
         try_opt_or!(self.os_2, false).is_oblique()
     }
 
-    /// Checks that font is variable.
+    /// Checks that face is variable.
     ///
     /// Simply checks the presence of a `fvar` table.
     #[inline]
@@ -855,7 +876,7 @@ impl<'a> Font<'a> {
         self.fvar.is_some()
     }
 
-    /// Returns font's weight.
+    /// Returns face's weight.
     ///
     /// Returns `Weight::Normal` when OS/2 table is not present.
     #[inline]
@@ -863,7 +884,7 @@ impl<'a> Font<'a> {
         try_opt_or!(self.os_2, Weight::default()).weight()
     }
 
-    /// Returns font's width.
+    /// Returns face's width.
     ///
     /// Returns `Width::Normal` when OS/2 table is not present or when value is invalid.
     #[inline]
@@ -876,7 +897,7 @@ impl<'a> Font<'a> {
         self.os_2.filter(|table| table.is_use_typo_metrics())
     }
 
-    /// Returns a horizontal font ascender.
+    /// Returns a horizontal face ascender.
     ///
     /// This method is affected by variation axes.
     #[inline]
@@ -889,7 +910,7 @@ impl<'a> Font<'a> {
         }
     }
 
-    /// Returns a horizontal font descender.
+    /// Returns a horizontal face descender.
     ///
     /// This method is affected by variation axes.
     #[inline]
@@ -902,7 +923,7 @@ impl<'a> Font<'a> {
         }
     }
 
-    /// Returns font's height.
+    /// Returns face's height.
     ///
     /// This method is affected by variation axes.
     #[inline]
@@ -910,7 +931,7 @@ impl<'a> Font<'a> {
         self.ascender() - self.descender()
     }
 
-    /// Returns a horizontal font line gap.
+    /// Returns a horizontal face line gap.
     ///
     /// This method is affected by variation axes.
     #[inline]
@@ -925,7 +946,7 @@ impl<'a> Font<'a> {
 
     // TODO: does this affected by USE_TYPO_METRICS?
 
-    /// Returns a vertical font ascender.
+    /// Returns a vertical face ascender.
     ///
     /// This method is affected by variation axes.
     #[inline]
@@ -934,7 +955,7 @@ impl<'a> Font<'a> {
             .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"vasc"), v))
     }
 
-    /// Returns a vertical font descender.
+    /// Returns a vertical face descender.
     ///
     /// This method is affected by variation axes.
     #[inline]
@@ -943,7 +964,7 @@ impl<'a> Font<'a> {
             .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"vdsc"), v))
     }
 
-    /// Returns a vertical font height.
+    /// Returns a vertical face height.
     ///
     /// This method is affected by variation axes.
     #[inline]
@@ -951,7 +972,7 @@ impl<'a> Font<'a> {
         Some(self.vertical_ascender()? - self.vertical_descender()?)
     }
 
-    /// Returns a vertical font line gap.
+    /// Returns a vertical face line gap.
     ///
     /// This method is affected by variation axes.
     #[inline]
@@ -960,7 +981,7 @@ impl<'a> Font<'a> {
             .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"vlgp"), v))
     }
 
-    /// Returns font's units per EM.
+    /// Returns face's units per EM.
     ///
     /// Returns `None` when value is not in a 16..=16384 range.
     #[inline]
@@ -968,7 +989,7 @@ impl<'a> Font<'a> {
         head::units_per_em(self.head)
     }
 
-    /// Returns font's x height.
+    /// Returns face's x height.
     ///
     /// This method is affected by variation axes.
     ///
@@ -979,7 +1000,7 @@ impl<'a> Font<'a> {
             .map(|v| self.apply_metrics_variation(Tag::from_bytes(b"xhgt"), v))
     }
 
-    /// Returns font's underline metrics.
+    /// Returns face's underline metrics.
     ///
     /// This method is affected by variation axes.
     ///
@@ -994,7 +1015,7 @@ impl<'a> Font<'a> {
         Some(metrics)
     }
 
-    /// Returns font's strikeout metrics.
+    /// Returns face's strikeout metrics.
     ///
     /// This method is affected by variation axes.
     ///
@@ -1009,7 +1030,7 @@ impl<'a> Font<'a> {
         Some(metrics)
     }
 
-    /// Returns font's subscript metrics.
+    /// Returns face's subscript metrics.
     ///
     /// This method is affected by variation axes.
     ///
@@ -1026,7 +1047,7 @@ impl<'a> Font<'a> {
         Some(metrics)
     }
 
-    /// Returns font's superscript metrics.
+    /// Returns face's superscript metrics.
     ///
     /// This method is affected by variation axes.
     ///
@@ -1043,7 +1064,7 @@ impl<'a> Font<'a> {
         Some(metrics)
     }
 
-    /// Returns a total number of glyphs in the font.
+    /// Returns a total number of glyphs in the face.
     ///
     /// Never zero.
     ///
@@ -1163,7 +1184,7 @@ impl<'a> Font<'a> {
         self.post.and_then(|post| post.glyph_name(glyph_id))
     }
 
-    /// Checks that font has
+    /// Checks that face has
     /// [Glyph Class Definition Table](
     /// https://docs.microsoft.com/en-us/typography/opentype/spec/gdef#glyph-class-definition-table).
     pub fn has_glyph_classes(&self) -> bool {
@@ -1272,9 +1293,9 @@ impl<'a> Font<'a> {
     /// }
     ///
     /// let data = std::fs::read("fonts/SourceSansPro-Regular-Tiny.ttf").unwrap();
-    /// let font = ttf_parser::Font::from_data(&data, 0).unwrap();
+    /// let face = ttf_parser::Face::from_slice(&data, 0).unwrap();
     /// let mut builder = Builder(String::new());
-    /// let bbox = font.outline_glyph(ttf_parser::GlyphId(13), &mut builder).unwrap();
+    /// let bbox = face.outline_glyph(ttf_parser::GlyphId(13), &mut builder).unwrap();
     /// assert_eq!(builder.0, "M 90 0 L 90 656 L 173 656 L 173 71 L 460 71 L 460 0 L 90 0 Z ");
     /// assert_eq!(bbox, ttf_parser::Rect { x_min: 90, y_min: 0, x_max: 460, y_max: 656 });
     /// ```
@@ -1292,8 +1313,8 @@ impl<'a> Font<'a> {
             return glyf::outline(self.loca?, glyf_table, glyph_id, builder);
         }
 
-        if let Some(ref metadata) = self.cff_ {
-            return cff::outline(metadata, glyph_id, builder);
+        if let Some(ref metadata) = self.cff1 {
+            return cff1::outline(metadata, glyph_id, builder);
         }
 
         if let Some(ref metadata) = self.cff2 {
@@ -1305,7 +1326,7 @@ impl<'a> Font<'a> {
 
     /// Returns a tight glyph bounding box.
     ///
-    /// Unless the current font has a `glyf` table, this is just a shorthand for `outline_glyph()`
+    /// Unless the current face has a `glyf` table, this is just a shorthand for `outline_glyph()`
     /// since only the `glyf` table stores a bounding box. In case of CFF and variable fonts
     /// we have to actually outline a glyph to find it's bounding box.
     ///
@@ -1316,11 +1337,20 @@ impl<'a> Font<'a> {
     /// This method is affected by variation axes.
     #[inline]
     pub fn glyph_bounding_box(&self, glyph_id: GlyphId) -> Option<Rect> {
-        if let Some(glyf_table) = self.glyf {
-            return glyf::glyph_bbox(self.loca?, glyf_table, glyph_id);
+        if !self.is_variable() {
+            if let Some(glyf_table) = self.glyf {
+                return glyf::glyph_bbox(self.loca?, glyf_table, glyph_id);
+            }
         }
 
         self.outline_glyph(glyph_id, &mut DummyOutline)
+    }
+
+    /// Returns a bounding box that large enough to enclose any glyph from the face.
+    #[inline]
+    pub fn global_bounding_box(&self) -> Rect {
+        // unwrap is safe, because this method cannot fail.
+        head::global_bbox(self.head).unwrap()
     }
 
     /// Returns a reference to a glyph's raster image.
@@ -1383,11 +1413,11 @@ impl<'a> Font<'a> {
     ///
     /// This is the only mutable method in the library.
     /// We can simplify the API a lot by storing the variable coordinates
-    /// in the font object itself.
+    /// in the face object itself.
     ///
     /// Since coordinates are stored on the stack, we allow only 32 of them.
     ///
-    /// Returns `None` when font is not variable or doesn't have such axis.
+    /// Returns `None` when face is not variable or doesn't have such axis.
     pub fn set_variation(&mut self, axis: Tag, value: f32) -> Option<()> {
         if !self.is_variable() {
             return None;
@@ -1453,9 +1483,9 @@ impl<'a> Font<'a> {
     }
 }
 
-impl fmt::Debug for Font<'_> {
+impl fmt::Debug for Face<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Font()")
+        write!(f, "Face()")
     }
 }
 
@@ -1465,7 +1495,7 @@ impl fmt::Debug for Font<'_> {
 #[inline]
 pub fn fonts_in_collection(data: &[u8]) -> Option<u32> {
     let mut s = Stream::new(data);
-    if &s.read::<Tag>()?.to_bytes() != b"ttcf" {
+    if s.read::<Magic>()? != Magic::FontCollection {
         return None;
     }
 
@@ -1477,130 +1507,81 @@ pub fn fonts_in_collection(data: &[u8]) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::writer;
-    use writer::TtfType::*;
 
     #[test]
     fn empty_font() {
-        assert!(Font::from_data(&[], 0).is_none());
-    }
-
-    #[test]
-    fn incomplete_header() {
-        let data = writer::convert(&[
-            TrueTypeMagic,
-            UInt16(0), // numTables
-            UInt16(0), // searchRange
-            UInt16(0), // entrySelector
-            UInt16(0), // rangeShift
-        ]);
-
-        for i in 0..data.len() {
-            assert!(Font::from_data(&data[0..i], 0).is_none());
-        }
+        assert_eq!(Face::from_slice(&[], 0).unwrap_err(),
+                   FaceParsingError::UnknownMagic);
     }
 
     #[test]
     fn zero_tables() {
-        let data = writer::convert(&[
-            TrueTypeMagic,
-            UInt16(0), // numTables
-            UInt16(0), // searchRange
-            UInt16(0), // entrySelector
-            UInt16(0), // rangeShift
-        ]);
+        let data = &[
+            0x00, 0x01, 0x00, 0x00, // magic
+            0x00, 0x00, // numTables: 0
+            0x00, 0x00, // searchRange: 0
+            0x00, 0x00, // entrySelector: 0
+            0x00, 0x00, // rangeShift: 0
+        ];
 
-        assert!(Font::from_data(&data, 0).is_none());
+        assert_eq!(Face::from_slice(data, 0).unwrap_err(),
+                   FaceParsingError::NoHeadTable);
     }
 
     #[test]
     fn tables_count_overflow() {
-        let data = writer::convert(&[
-            TrueTypeMagic,
-            UInt16(std::u16::MAX), // numTables
-            UInt16(0), // searchRange
-            UInt16(0), // entrySelector
-            UInt16(0), // rangeShift
-        ]);
+        let data = &[
+            0x00, 0x01, 0x00, 0x00, // magic
+            0xFF, 0xFF, // numTables: u16::MAX
+            0x00, 0x00, // searchRange: 0
+            0x00, 0x00, // entrySelector: 0
+            0x00, 0x00, // rangeShift: 0
+        ];
 
-        assert!(Font::from_data(&data, 0).is_none());
-    }
-
-    #[test]
-    fn open_type_magic() {
-        let data = writer::convert(&[
-            OpenTypeMagic,
-            UInt16(0), // numTables
-            UInt16(0), // searchRange
-            UInt16(0), // entrySelector
-            UInt16(0), // rangeShift
-        ]);
-
-        assert!(Font::from_data(&data, 0).is_none());
-    }
-
-    #[test]
-    fn unknown_magic() {
-        let data = writer::convert(&[
-            Raw(&[0xFF, 0xFF, 0xFF, 0xFF]),
-            UInt16(0), // numTables
-            UInt16(0), // searchRange
-            UInt16(0), // entrySelector
-            UInt16(0), // rangeShift
-        ]);
-
-        assert!(Font::from_data(&data, 0).is_none());
+        assert_eq!(Face::from_slice(data, 0).unwrap_err(),
+                   FaceParsingError::MalformedFont);
     }
 
     #[test]
     fn empty_font_collection() {
-        let data = writer::convert(&[
-            FontCollectionMagic,
-            UInt16(1), // majorVersion
-            UInt16(0), // minorVersion
-            UInt32(0), // numFonts
-        ]);
+        let data = &[
+            0x74, 0x74, 0x63, 0x66, // magic
+            0x00, 0x00, // majorVersion: 0
+            0x00, 0x00, // minorVersion: 0
+            0x00, 0x00, 0x00, 0x00, // numFonts: 0
+        ];
 
-        assert_eq!(fonts_in_collection(&data), Some(0));
-        assert!(Font::from_data(&data, 0).is_none());
+        assert_eq!(fonts_in_collection(data), Some(0));
+        assert_eq!(Face::from_slice(data, 0).unwrap_err(),
+                   FaceParsingError::FaceIndexOutOfBounds);
     }
 
     #[test]
     fn font_collection_num_fonts_overflow() {
-        let data = writer::convert(&[
-            FontCollectionMagic,
-            UInt16(1), // majorVersion
-            UInt16(0), // minorVersion
-            UInt32(std::u32::MAX), // numFonts
-        ]);
+        let data = &[
+            0x74, 0x74, 0x63, 0x66, // magic
+            0x00, 0x00, // majorVersion: 0
+            0x00, 0x00, // minorVersion: 0
+            0xFF, 0xFF, 0xFF, 0xFF, // numFonts: u32::MAX
+        ];
 
-        assert_eq!(fonts_in_collection(&data), Some(std::u32::MAX));
-        assert!(Font::from_data(&data, 0).is_none());
+        assert_eq!(fonts_in_collection(data), Some(std::u32::MAX));
+        assert_eq!(Face::from_slice(data, 0).unwrap_err(),
+                   FaceParsingError::MalformedFont);
     }
 
     #[test]
-    fn font_index_overflow_1() {
-        let data = writer::convert(&[
-            FontCollectionMagic,
-            UInt16(1), // majorVersion
-            UInt16(0), // minorVersion
-            UInt32(1), // numFonts
-        ]);
+    fn font_index_overflow() {
+        let data = &[
+            0x74, 0x74, 0x63, 0x66, // magic
+            0x00, 0x00, // majorVersion: 0
+            0x00, 0x00, // minorVersion: 0
+            0x00, 0x00, 0x00, 0x01, // numFonts: 1
+            0x00, 0x00, 0x00, 0x0C, // offset [0]: 12
+        ];
 
-        assert_eq!(fonts_in_collection(&data), Some(1));
-        assert!(Font::from_data(&data, std::u32::MAX).is_none());
-    }
-
-    #[test]
-    fn font_index_overflow_2() {
-        let data = writer::convert(&[
-            FontCollectionMagic,
-            UInt16(1), // majorVersion
-            UInt16(0), // minorVersion
-            UInt32(std::u32::MAX), // numFonts
-        ]);
-
-        assert_eq!(fonts_in_collection(&data), Some(std::u32::MAX));
-        assert!(Font::from_data(&data, std::u32::MAX - 1).is_none());
+        assert_eq!(fonts_in_collection(data), Some(1));
+        assert_eq!(Face::from_slice(data, std::u32::MAX).unwrap_err(),
+                   FaceParsingError::FaceIndexOutOfBounds);
     }
 }
