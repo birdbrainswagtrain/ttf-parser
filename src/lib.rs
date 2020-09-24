@@ -586,6 +586,8 @@ pub struct Face<'a> {
     cff1: Option<cff1::Metadata<'a>>,
     cff2: Option<cff2::Metadata<'a>>,
     cmap: Option<cmap::Subtables<'a>>,
+    colr: Option<colr::Table<'a>>,
+    cpal: Option<cpal::Table<'a>>,
     fvar: Option<fvar::Table<'a>>,
     gdef: Option<gdef::Table<'a>>,
     glyf: Option<&'a [u8]>,
@@ -665,6 +667,8 @@ impl<'a> Face<'a> {
             cff1: None,
             cff2: None,
             cmap: None,
+            colr: None,
+            cpal: None,
             fvar: None,
             gdef: None,
             glyf: None,
@@ -728,6 +732,8 @@ impl<'a> Face<'a> {
                 b"sbix" => face.sbix = data.get(range),
                 b"vhea" => face.vhea = data.get(range).and_then(|data| vhea::parse(data)),
                 b"vmtx" => vmtx = data.get(range),
+                b"COLR" => face.colr = data.get(range).and_then(|data| colr::parse(data)),
+                b"CPAL" => face.cpal = data.get(range).and_then(|data| cpal::parse(data)),
                 _ => {}
             }
         }
