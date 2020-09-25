@@ -1,11 +1,11 @@
 use crate::parser::{Stream, LazyArray16, FromData};
 
-#[derive(Clone)]
-struct Color{
-    b: u8,
-    g: u8,
-    r: u8,
-    a: u8
+#[derive(Clone,Debug,Copy)]
+pub struct Color{
+    pub b: u8,
+    pub g: u8,
+    pub r: u8,
+    pub a: u8
 }
 
 impl FromData for Color {
@@ -28,6 +28,13 @@ pub struct Table<'a>{
     color_indices: LazyArray16<'a,u16>,
     colors: LazyArray16<'a,Color>,
     colors_per_palette: u16
+}
+
+impl<'a> Table<'a> {
+    pub fn get_color(&self, palette: u16, index: u16) -> Color {
+        let offset = self.color_indices.get(palette).unwrap();
+        self.colors.get(offset + index).unwrap()
+    }
 }
 
 pub(crate) fn parse(data: &[u8]) -> Option<Table> {

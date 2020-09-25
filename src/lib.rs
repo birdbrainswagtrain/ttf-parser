@@ -1418,6 +1418,27 @@ impl<'a> Face<'a> {
         None
     }
 
+    /// Get color layer information for a given glyph id.
+    #[inline]
+    pub fn colr_layers(
+        &self,
+        glyph_id: GlyphId,
+    ) -> Option<colr::LayerIter> {
+        if let Some(colr) = &self.colr {
+            return colr.get_layers(glyph_id.0);
+        }
+        None
+    }
+
+    /// Get a color from the font's COLR/CPAL palette.
+    #[inline]
+    pub fn cpal_color(&self, palette: u16, index: u16) -> Option<cpal::Color> {
+        if let Some(cpal) = &self.cpal {
+            return Some(cpal.get_color(palette, index));
+        }
+        None
+    }
+
     /// Returns a tight glyph bounding box.
     ///
     /// Unless the current face has a `glyf` table, this is just a shorthand for `outline_glyph()`

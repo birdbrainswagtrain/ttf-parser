@@ -7,10 +7,10 @@ struct BaseGlyph{
     layer_count: u16
 }
 
-#[derive(Clone)]
-struct Layer{
-    glyph_id: u16,
-    palette_index: u16
+#[derive(Clone,Debug,Copy)]
+pub struct Layer{
+    pub glyph_id: u16,
+    pub palette_index: u16
 }
 
 impl FromData for BaseGlyph {
@@ -42,6 +42,43 @@ impl FromData for Layer {
 pub struct Table<'a>{
     base_glyphs: LazyArray16<'a,BaseGlyph>,
     layers: LazyArray16<'a,Layer>
+}
+
+#[derive(Debug)]
+pub struct LayerIter<'a> {
+    layers: LazyArray16<'a,Layer>,
+    layer_index: u16,
+    layer_count: u16,
+    i: u16
+}
+
+impl<'a> Iterator for LayerIter<'a> {
+    type Item = Layer;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.i < self.layer_count {
+            let item = self.layers.get(self.layer_index + self.i).unwrap().clone();
+            self.i+=1;
+            return Some(item);
+        }
+        None
+    }
+}
+
+impl<'a> Table<'a> {
+    pub fn get_layers(&self, id: u16) -> Option<LayerIter<'a>> {
+        for glyph in self.base_glyphs.clone().into_iter() {
+            if glyph.ref_glyph_id == id {
+                return Some(LayerIter{
+                    layers: self.layers.clone(),
+                    layer_index: glyph.layer_index,
+                    layer_count: glyph.layer_count,
+                    i: 0
+                });
+            }
+        }
+        None
+    }
 }
 
 pub(crate) fn parse(data: &[u8]) -> Option<Table> {
